@@ -4,12 +4,14 @@ import YouTube from 'react-youtube';
 import { Capacitor } from '@capacitor/core';
 import { MediaSession as NativeMS } from '@jofr/capacitor-media-session';
 import { Ic } from '../lib/icons';
+import { Ix, DEF, Cfg, Pl, T, uid, fm, encodePl, decodePl } from './kit';
+import Settings from './Settings';
+import { PlSheet, AddSheet, PickSheet, ImportSheet, PlDetail, PlCover } from './Playlists';
 
-type T = { id: string; title: string; artist: string; thumb: string; duration: number };
 type Ln = { t: number; s: string };
 type Cat = { t: string; q: string; h: number; i: string };
 type Ar = { id: string; name: string; thumb: string };
-type Sub = { type: 'artist' | 'album'; id: string; name?: string };
+type Sub = { type: 'artist' | 'album'; id: string; name?: string; thumb?: string };
 
 const URL_ = 'https://saweria.co/thiskaltzy404';
 const NAV: [string, string][] = [['home', 'Beranda'], ['search', 'Cari'], ['lib', 'Pustaka'], ['coffee', 'Traktir']];
@@ -60,7 +62,6 @@ const GROUPS: { title: string; cats: Cat[] }[] = [
 ];
 const TREN = ['Pop Indonesia', 'Dangdut koplo', 'Lofi', 'Akustik', 'Indie Indonesia', 'Dj remix', 'Religi'];
 
-const fm = (s: number) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 const hue = (id: string) => [...id].reduce((a, c) => a + c.charCodeAt(0), 0) % 360;
 const greet = (): [string, string] => {
   const h = new Date().getHours();
@@ -84,6 +85,7 @@ function useLS<S>(k: string, d: S): [S, (v: S) => void] {
 }
 const Th = ({ t }: { t?: T }) => <img src={t?.thumb || '/logo.png'} alt="" loading="lazy" />;
 const cover = (u?: string, s = 400) => (u ? u.replace(/=w\d+-h\d+.*$/, `=w${s}-h${s}-l90-rj`) : '/logo.png');
+const wideImg = (u?: string) => (u ? u.replace(/=w\d+-h\d+.*$/, '=w640-h360-l90-rj') : '/logo.png');
 const asT = (it: any, who = ''): T => ({ id: it.id, title: it.title, artist: it.sub || who, thumb: it.thumb || '', duration: it.duration || 0 });
 const Rp = ({ one }: { one: boolean }) => (
   <svg className="i" viewBox="0 0 24 24" dangerouslySetInnerHTML={{ __html: '<path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/>' + (one ? '<path d="M11.5 10l1.5-1v6"/>' : '') }} />
@@ -103,7 +105,7 @@ const EXTRA_CSS = `
 .qs.o{transform:none}
 .qh{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:18px;margin-bottom:10px}
 .ct button.on2,.nh button.on2{color:var(--ac)}
-.nr{display:flex;gap:14px;align-items:center}
+.nr{display:flex;gap:12px;align-items:center}
 `;
 
 export default function App() {
@@ -135,16 +137,76 @@ export default function App() {
   const [lrc, setLrc] = useState<Ln[]>([]);
   const [liked, setLiked] = useLS<T[]>('cropify:liked', []);
   const [hist, setHist] = useLS<T[]>('cropify:hist', []);
+
+  // Pengaturan, playlist, timer
+  const [cfgRaw, setCfg] = useLS<Cfg>('cropify:cfg', DEF);
+  const cfg: Cfg = { ...DEF, ...cfgRaw };
+  const set = (p: Partial<Cfg>) => setCfg({ ...cfg, ...p });
+  const [pls, setPls] = useLS<Pl[]>('cropify:pls', []);
+  const [plId, setPlId] = useState<string | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editPl, setEditPl] = useState<Pl | undefined>(undefined);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addT, setAddT] = useState<T | undefined>(undefined);
+  const [pickId, setPickId] = useState<string | null>(null);
+  const [shared, setShared] = useState<Pl | undefined>(undefined);
+  const [shOpen, setShOpen] = useState(false);
+  const [openS, setOpenS] = useState(false);
+  const [toast, setToast] = useState('');
+  const [sleepAt, setSleepAt] = useState<number | null>(null);
+  const [sleepEndUi, setSleepEndUi] = useState(false);
+  const [now, setNow] = useState(0);
+  const [autoOn, setAutoOn] = useState(true);
+  const [startAt, setStartAt] = useState(0);
+
   const pl = useRef<any>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const isNative = Capacitor.isNativePlatform();
   const stack = useRef<number[]>([]);
   const want = useRef(false);
   const sil = useRef<HTMLAudioElement | null>(null);
   const stepRef = useRef<(d: number) => void>(() => {});
+  const seed = useRef<T | undefined>(undefined);
+  const sleepEnd = useRef(false);
+  const bgOn = useRef(true);
+  bgOn.current = cfg.bg;
   const cur: T | undefined = queue[qi];
+  const openPl = pls.find((p) => p.id === plId);
+
+  const say = (m: string) => { setToast(m); setTimeout(() => setToast(''), 2200); };
 
   useEffect(() => setG(greet()), []);
+
+  // Warna aksen
+  useEffect(() => { document.documentElement.style.setProperty('--ac', cfg.accent); }, [cfg.accent]);
+
+  // Nilai bawaan + lanjutkan lagu terakhir
+  useEffect(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem('cropify:cfg') || '{}');
+      if (c.defShuffle) setShuffle(true);
+      if (c.defRepeat) setRepeat(c.defRepeat);
+      if (c.resume === false) return;
+      const l = JSON.parse(localStorage.getItem('cropify:last') || 'null');
+      if (l?.t?.id) {
+        setQueue([l.t]); setQi(0); setDur(l.t.duration || 0);
+        setTime(l.p || 0); setStartAt(Math.floor(l.p || 0)); setAutoOn(false);
+      }
+    } catch {}
+  }, []);
+  useEffect(() => {
+    if (!cur) return;
+    try { localStorage.setItem('cropify:last', JSON.stringify({ t: cur, p: Math.floor(time) })); } catch {}
+  }, [cur?.id, Math.floor(time / 5)]);
+
+  // Playlist yang dibagikan lewat tautan
+  useEffect(() => {
+    try {
+      const c = new URLSearchParams(location.search).get('pl');
+      if (!c) return;
+      const p = decodePl(c);
+      history.replaceState(null, '', location.pathname);
+      if (p) { setShared(p); setShOpen(true); }
+    } catch {}
+  }, []);
 
   // Anti salin: matikan klik kanan, salin, seret, dan pintasan developer tools
   useEffect(() => {
@@ -168,82 +230,67 @@ export default function App() {
     const a = new Audio(silentUrl());
     a.loop = true;
     sil.current = a;
-    const onVis = () => { if (want.current) setTimeout(() => pl.current?.playVideo?.(), 300); };
+    const onVis = () => { if (want.current && bgOn.current) setTimeout(() => pl.current?.playVideo?.(), 300); };
     document.addEventListener('visibilitychange', onVis);
     return () => { document.removeEventListener('visibilitychange', onVis); a.pause(); };
   }, []);
-  useEffect(() => { if (cur) want.current = true; }, [cur?.id]);
   useEffect(() => {
     const a = sil.current;
-    if (a) { if (playing) a.play().catch(() => {}); else a.pause(); }
+    if (a) { if (playing && cfg.bg) a.play().catch(() => {}); else a.pause(); }
     if ('mediaSession' in navigator) navigator.mediaSession.playbackState = playing ? 'playing' : 'paused';
-  }, [playing]);
+  }, [playing, cfg.bg]);
 
   // Mode latar belakang native (hanya aktif di dalam APK)
   useEffect(() => {
     const bm = (window as any).Capacitor?.Plugins?.BackgroundMode;
-    if (!bm || !cur) return;
+    if (!bm) return;
     (async () => {
       try {
+        if (!cfg.bg || !cur) { await bm.disable?.(); return; }
         await bm.requestNotificationsPermission?.();
         await bm.enable?.({ title: 'Cropify', text: 'Musik sedang diputar', silent: true });
         await bm.disableWebViewOptimizations?.();
       } catch {}
     })();
-  }, [cur?.id]);
+  }, [cur?.id, cfg.bg]);
 
   // Notifikasi media native (hanya aktif di dalam APK)
-useEffect(() => {
-  if (!isNative || !cur) return;
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !cur) return;
+    const ms: any = NativeMS;
+    try {
+      ms.setMetadata({ title: cur.title, artist: cur.artist, artwork: [{ src: cur.thumb || 'https://cropifymusic.vercel.app/logo.png', sizes: '512x512', type: 'image/jpeg' }] });
+      ms.setActionHandler({ action: 'play' }, () => { want.current = true; pl.current?.playVideo(); });
+      ms.setActionHandler({ action: 'pause' }, () => { want.current = false; pl.current?.pauseVideo(); });
+      ms.setActionHandler({ action: 'nexttrack' }, () => stepRef.current(1));
+      ms.setActionHandler({ action: 'previoustrack' }, () => stepRef.current(-1));
+    } catch {}
+  }, [cur?.id]);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+    try { (NativeMS as any).setPlaybackState({ playbackState: playing ? 'playing' : 'paused' }); } catch {}
+  }, [playing]);
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform() || !dur) return;
+    try { (NativeMS as any).setPositionState({ duration: dur, position: Math.min(time, dur), playbackRate: 1 }); } catch {}
+  }, [Math.floor(time / 5), dur]);
 
-  const ms: any = NativeMS;
-  try {
-    ms.setMetadata({
-      title: cur.title,
-      artist: cur.artist,
-      artwork: [
-        {
-          src: cur.thumb || 'https://cropifymusic.vercel.app/logo.png',
-          sizes: '512x512',
-          type: 'image/jpeg',
-        },
-      ],
-    });
+  // Volume dan kecepatan putar
+  const applyAudio = () => { try { pl.current?.setPlaybackRate?.(cfg.rate); pl.current?.setVolume?.(cfg.vol); } catch {} };
+  useEffect(() => { applyAudio(); }, [cfg.rate, cfg.vol, cur?.id]);
 
-    ms.setActionHandler({ action: 'play' }, () => {
-      want.current = true;
-      audioRef.current?.play();
-    });
-
-    ms.setActionHandler({ action: 'pause' }, () => {
-      want.current = false;
-      audioRef.current?.pause();
-    });
-
-    ms.setActionHandler({ action: 'nexttrack' }, () => stepRef.current(1));
-    ms.setActionHandler({ action: 'previoustrack' }, () => stepRef.current(-1));
-  } catch {}
-}, [cur?.id, isNative]);
-
-useEffect(() => {
-  if (!isNative) return;
-  try {
-    (NativeMS as any).setPlaybackState({
-      playbackState: playing ? 'playing' : 'paused',
-    });
-  } catch {}
-}, [playing, isNative]);
-
-useEffect(() => {
-  if (!isNative || !dur) return;
-  try {
-    (NativeMS as any).setPositionState({
-      duration: dur,
-      position: Math.min(time, dur),
-      playbackRate: 1,
-    });
-  } catch {}
-}, [Math.floor(time / 5), dur, isNative]);
+  // Timer tidur
+  useEffect(() => {
+    if (!sleepAt) return;
+    const id = setInterval(() => {
+      setNow(Date.now());
+      if (Date.now() >= sleepAt) {
+        want.current = false; pl.current?.pauseVideo?.(); setPlaying(false); setSleepAt(null);
+        say('Timer tidur selesai, lagu dihentikan');
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [sleepAt]);
 
   // Beranda: lagu sesuai chip
   useEffect(() => {
@@ -283,13 +330,13 @@ useEffect(() => {
 
   // Cari artis (debounce)
   useEffect(() => {
-    if (!q.trim() || cat) { setArts([]); return; }
+    if (!q.trim() || cat || !cfg.arts) { setArts([]); return; }
     const id = setTimeout(async () => {
       const d = await api('/api/music?kind=artists&q=' + encodeURIComponent(q));
       setArts(d.artists || []);
     }, 500);
     return () => clearTimeout(id);
-  }, [q, cat]);
+  }, [q, cat, cfg.arts]);
 
   // Halaman artis / album
   useEffect(() => {
@@ -305,225 +352,84 @@ useEffect(() => {
   // Lirik tersinkron
   useEffect(() => {
     setLrc([]);
-    if (!cur) return;
+    if (!cur || !cfg.lyrics) return;
     let ok = true;
     const p = new URLSearchParams({ title: cur.title, artist: cur.artist.split(',')[0], duration: String(cur.duration || '') });
     api('/api/lyrics?' + p).then((d) => { if (ok && d.lrc) setLrc(parseLrc(d.lrc)); });
     return () => { ok = false; };
-  }, [cur?.id]);
+  }, [cur?.id, cfg.lyrics]);
 
- // Sinkronkan waktu dari player
-useEffect(() => {
-  if (!playing) return;
-
-  const id = setInterval(() => {
-    if (isNative) {
-      // Mode APK → ambil dari HTML5 Audio
-      if (audioRef.current) {
-        setTime(audioRef.current.currentTime);
-        if (audioRef.current.duration && !isNaN(audioRef.current.duration)) {
-          setDur(audioRef.current.duration);
-        }
-      }
-    } else {
-      // Mode browser → ambil dari YouTube
+  // Sinkronkan waktu dari player YouTube
+  useEffect(() => {
+    if (!playing) return;
+    const id = setInterval(() => {
       const p = pl.current;
       if (p?.getCurrentTime) {
         setTime(p.getCurrentTime());
         const d = p.getDuration?.();
         if (d) setDur(d);
       }
-    }
-  }, 250);
-
-  return () => clearInterval(id);
-}, [playing, isNative]);
+    }, 250);
+    return () => clearInterval(id);
+  }, [playing]);
 
   const kick = () => {
-  want.current = true;
-  sil.current?.play().catch(() => {});
-};
-
-const playNative = async (track: T) => {
-  try {
-    const data = await api('/api/stream?id=' + track.id);
-    if (!data?.url) throw new Error('no stream');
-
-    if (!audioRef.current) {
-      audioRef.current = new Audio();
-      audioRef.current.preload = 'auto';
-    }
-
-    const a = audioRef.current;
-
-    a.onloadedmetadata = null;
-    a.ontimeupdate = null;
-    a.onended = null;
-    a.onplay = null;
-    a.onpause = null;
-    a.onerror = null;
-
-    a.src = data.url;
-
-    a.onloadedmetadata = () => {
-      setDur(a.duration || data.duration || track.duration || 0);
-    };
-    a.ontimeupdate = () => setTime(a.currentTime);
-    a.onended = () => ended();
-    a.onplay = () => setPlaying(true);
-    a.onpause = () => setPlaying(false);
-    a.onerror = () => {
-      console.error('Audio error, fallback youtube');
-      pl.current?.loadVideoById?.(track.id);
-      pl.current?.playVideo?.();
-    };
-
-    await a.play();
-  } catch (e) {
-    console.error('Native play failed', e);
-    pl.current?.loadVideoById?.(track.id);
-    pl.current?.playVideo?.();
-  }
-};
-
-const play = (list: T[], i: number) => {
-  const t = list[i];
-  if (!t) return;
-
-  kick();
-  stack.current = [];
-  setQueue(list);
-  setQi(i);
-  setPlaying(true);
-  setTime(0);
-  setDur(t.duration || 0);
-  setHist([t, ...hist.filter((x) => x.id !== t.id)].slice(0, 30));
-
-  if (isNative) {
-    playNative(t);
-  }
-};
-
-const jump = (n: number) => {
-  kick();
-  setQi(n);
-  setTime(0);
-  setPlaying(true);
-  setDur(queue[n]?.duration || 0);
-
-  if (isNative) {
-    playNative(queue[n]);
-  }
-};
-
-const step = useCallback((d: number) => {
-  if (!queue.length) return;
-
-  let n: number;
-  if (shuffle && queue.length > 1) {
-    if (d < 0 && stack.current.length) {
-      n = stack.current.pop() as number;
-    } else {
-      stack.current.push(qi);
-      do {
-        n = Math.floor(Math.random() * queue.length);
-      } while (n === qi);
-    }
-  } else {
-    n = (qi + d + queue.length) % queue.length;
-  }
-
-  if (n === qi) {
-    if (isNative) {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play();
+    if (!bgOn.current) return;
+    want.current = true;
+    sil.current?.play().catch(() => {});
+  };
+  const play = (list: T[], i: number) => {
+    const t = list[i];
+    if (!t) return;
+    kick();
+    stack.current = [];
+    setAutoOn(true); setStartAt(0);
+    setQueue(list); setQi(i); setPlaying(true); setTime(0); setDur(t.duration);
+    if (cfg.saveHist) setHist([t, ...hist.filter((x) => x.id !== t.id)].slice(0, 30));
+  };
+  const jump = (n: number) => { kick(); setAutoOn(true); setStartAt(0); setQi(n); setTime(0); setPlaying(true); setDur(queue[n].duration); };
+  const step = useCallback((d: number) => {
+    if (!queue.length) return;
+    let n: number;
+    if (shuffle && queue.length > 1) {
+      if (d < 0 && stack.current.length) {
+        n = stack.current.pop() as number;
+      } else {
+        stack.current.push(qi);
+        do { n = Math.floor(Math.random() * queue.length); } while (n === qi);
       }
     } else {
-      pl.current?.seekTo(0, true);
-      pl.current?.playVideo();
+      n = (qi + d + queue.length) % queue.length;
     }
-    return;
-  }
-
-  setQi(n);
-  setTime(0);
-  setPlaying(true);
-  setDur(queue[n].duration || 0);
-
-  if (isNative) {
-    playNative(queue[n]);
-  }
-}, [queue, qi, shuffle, isNative]);
-
-stepRef.current = step;
-
-const ended = () => {
-  if (repeat === 2) {
-    if (isNative) {
-      if (audioRef.current) {
-        audioRef.current.currentTime = 0;
-        audioRef.current.play();
-      }
-    } else {
-      pl.current?.seekTo(0, true);
-      pl.current?.playVideo();
+    if (n === qi) { pl.current?.seekTo(0, true); pl.current?.playVideo(); return; }
+    setAutoOn(true); setStartAt(0);
+    setQi(n); setTime(0); setPlaying(true); setDur(queue[n].duration);
+  }, [queue, qi, shuffle]);
+  stepRef.current = step;
+  const ended = () => {
+    if (sleepEnd.current) {
+      sleepEnd.current = false; setSleepEndUi(false);
+      want.current = false; setPlaying(false); say('Timer tidur: lagu dihentikan');
+      return;
     }
-    return;
-  }
-
-  if (repeat === 0 && !shuffle && qi === queue.length - 1) {
-    want.current = false;
-    setPlaying(false);
-    setTime(0);
-    return;
-  }
-
-  step(1);
-};
-
-const toggle = () => {
-  if (isNative) {
-    const a = audioRef.current;
-    if (!a) return;
-    if (playing) {
-      want.current = false;
-      a.pause();
-    } else {
-      kick();
-      a.play();
-    }
-  } else {
+    if (repeat === 2) { pl.current?.seekTo(0, true); pl.current?.playVideo(); return; }
+    if (!cfg.autoNext) { want.current = false; setPlaying(false); return; }
+    if (repeat === 0 && !shuffle && qi === queue.length - 1) { want.current = false; setPlaying(false); setTime(0); return; }
+    step(1);
+  };
+  const toggle = () => {
     const p = pl.current;
     if (!p) return;
-    if (playing) {
-      want.current = false;
-      p.pauseVideo();
-    } else {
-      kick();
-      p.playVideo();
-    }
-  }
-};
-
-const seek = (s: number) => {
-  if (isNative) {
-    if (audioRef.current) {
-      audioRef.current.currentTime = s;
-      setTime(s);
-    }
-  } else {
-    pl.current?.seekTo(s, true);
-    setTime(s);
-  }
-};
+    if (playing) { want.current = false; p.pauseVideo(); } else { kick(); p.playVideo(); }
+  };
+  const seek = (s: number) => { pl.current?.seekTo(s, true); setTime(s); };
   const isL = (t?: T) => !!t && liked.some((x) => x.id === t.id);
   const like = (t: T) => setLiked(isL(t) ? liked.filter((x) => x.id !== t.id) : [t, ...liked]);
   const openCat = (c: Cat) => { setCat(c); setQ(c.q); };
   const closeSearch = () => { setCat(null); setQ(''); };
   const saveRecent = (s: string) => {
     const v = s.trim();
-    if (v.length < 2 || cat) return;
+    if (v.length < 2 || cat || !cfg.saveSearch) return;
     setRecent([v, ...recent.filter((x) => x.toLowerCase() !== v.toLowerCase())].slice(0, 8));
   };
   const openSub = (s: Sub) => setSubs([...subs, s]);
@@ -533,34 +439,79 @@ const seek = (s: number) => {
     setShuffle(shuf); play(l, 0); setOpen(true);
   };
 
+  // Playlist
+  const updPl = (id: string, f: (p: Pl) => Pl) => setPls(pls.map((p) => (p.id === id ? f(p) : p)));
+  const toggleIn = (id: string, t: T) => updPl(id, (p) => (p.tracks.some((x) => x.id === t.id) ? { ...p, tracks: p.tracks.filter((x) => x.id !== t.id) } : { ...p, tracks: [...p.tracks, t] }));
+  const openAdd = (t: T) => { setAddT(t); setAddOpen(true); };
+  const newPl = () => { setEditPl(undefined); setEditOpen(true); };
+  const savePl = (p: Pl) => {
+    if (pls.some((x) => x.id === p.id)) { setPls(pls.map((x) => (x.id === p.id ? p : x))); say('Playlist diperbarui'); }
+    else {
+      const s = seed.current; seed.current = undefined;
+      setPls([s ? { ...p, tracks: [s] } : p, ...pls]);
+      say(s ? 'Playlist dibuat, lagu ditambahkan' : 'Playlist dibuat');
+    }
+    setEditOpen(false);
+  };
+  const delPl = () => {
+    if (!editPl) return;
+    if (!confirm(`Hapus playlist "${editPl.name}"?`)) return;
+    setPls(pls.filter((x) => x.id !== editPl.id));
+    setPlId(null); setEditOpen(false); say('Playlist dihapus');
+  };
+  const sharePl = async (p: Pl) => {
+    if (!p.pub) { say('Ubah playlist jadi Publik dulu lewat tombol Ubah'); return; }
+    if (!p.tracks.length) { say('Tambahkan lagu dulu'); return; }
+    const url = `${location.origin}/?pl=${encodePl(p)}`;
+    try { if (navigator.share) { await navigator.share({ title: p.name, text: `Dengarkan playlist "${p.name}" di Cropify`, url }); return; } } catch {}
+    try { await navigator.clipboard.writeText(url); say('Tautan playlist disalin'); } catch { say('Gagal menyalin tautan'); }
+  };
+
+  // Pengaturan: timer tidur dan data
+  const setSleep = (m: number) => {
+    if (m === 0) { setSleepAt(null); sleepEnd.current = false; setSleepEndUi(false); say('Timer tidur dimatikan'); }
+    else if (m === -1) { setSleepAt(null); sleepEnd.current = true; setSleepEndUi(true); say('Lagu berhenti setelah lagu ini selesai'); }
+    else { sleepEnd.current = false; setSleepEndUi(false); setNow(Date.now()); setSleepAt(Date.now() + m * 60000); say(`Timer tidur ${m} menit`); }
+  };
+  const sleepLabel = sleepEndUi ? 'Akhir lagu' : sleepAt ? `${Math.max(1, Math.ceil((sleepAt - (now || Date.now())) / 60000))} menit lagi` : 'Mati';
+  const act = {
+    clearHist: () => { setHist([]); say('Riwayat putar dihapus'); },
+    clearRecent: () => { setRecent([]); say('Riwayat pencarian dihapus'); },
+    clearLiked: () => { setLiked([]); say('Lagu disukai dihapus'); },
+    clearPls: () => { setPls([]); setPlId(null); say('Semua playlist dihapus'); },
+    exportData: () => JSON.stringify({ app: 'cropify', v: 1, cfg, liked, hist, recent, playlists: pls }),
+    importData: (s: string) => {
+      try {
+        const o = JSON.parse(s);
+        if (!o || o.app !== 'cropify') return false;
+        if (o.cfg) setCfg({ ...DEF, ...o.cfg });
+        if (Array.isArray(o.liked)) setLiked(o.liked);
+        if (Array.isArray(o.hist)) setHist(o.hist);
+        if (Array.isArray(o.recent)) setRecent(o.recent);
+        if (Array.isArray(o.playlists)) setPls(o.playlists);
+        return true;
+      } catch { return false; }
+    },
+    reset: () => { setCfg(DEF); say('Pengaturan dikembalikan ke bawaan'); },
+  };
+
   // Kontrol di notifikasi / layar kunci (browser)
-useEffect(() => {
-  if (!cur || !('mediaSession' in navigator) || isNative) return;
-
-  const ms = navigator.mediaSession;
-  ms.metadata = new MediaMetadata({
-    title: cur.title,
-    artist: cur.artist,
-    artwork: [{ src: cur.thumb || '/logo.png', sizes: '512x512' }],
-  });
-
-  ms.setActionHandler('play', () => {
-    want.current = true;
-    pl.current?.playVideo();
-  });
-  ms.setActionHandler('pause', () => {
-    want.current = false;
-    pl.current?.pauseVideo();
-  });
-  ms.setActionHandler('nexttrack', () => step(1));
-  ms.setActionHandler('previoustrack', () => step(-1));
-}, [cur, step, isNative]);
+  useEffect(() => {
+    if (!cur || !('mediaSession' in navigator)) return;
+    const ms = navigator.mediaSession;
+    ms.metadata = new MediaMetadata({ title: cur.title, artist: cur.artist, artwork: [{ src: cur.thumb || '/logo.png', sizes: '512x512' }] });
+    ms.setActionHandler('play', () => { want.current = true; pl.current?.playVideo(); });
+    ms.setActionHandler('pause', () => { want.current = false; pl.current?.pauseVideo(); });
+    ms.setActionHandler('nexttrack', () => step(1));
+    ms.setActionHandler('previoustrack', () => step(-1));
+  }, [cur, step]);
 
   const row = (t: T, list: T[], i: number) => (
     <div key={t.id} role="button" className={'row rise ' + (cur?.id === t.id && playing ? 'cur' : '')}
       style={{ animationDelay: `${Math.min(i, 8) * 50}ms` }} onClick={() => { play(list, i); setOpen(true); }}>
       <div className="th"><Th t={t} /></div>
       <div className="m"><b>{t.title}</b><span>{t.artist}{t.duration ? ` • ${fm(t.duration)}` : ''}</span></div>
+      <button className="rp" onClick={(e) => { e.stopPropagation(); openAdd(t); }}><Ix n="plus" /></button>
       <button className={'rp ' + (isL(t) ? 'like' : '')} onClick={(e) => { e.stopPropagation(); like(t); }}><Ic n="heart" /></button>
     </div>
   );
@@ -570,28 +521,20 @@ useEffect(() => {
   const pct = dur ? Math.min(100, (time / dur) * 100) : 0;
 
   return (
-    <div id="app">
+    <div id="app" className={cfg.motion ? '' : 'nomo'}>
       <style>{EXTRA_CSS}</style>
-      <div className="blob b1" /><div className="blob b2" />
+      {cfg.blobs && (<><div className="blob b1" /><div className="blob b2" /></>)}
 
       <div aria-hidden style={{ position: 'fixed', left: -9999, top: 0, width: 200, height: 200, pointerEvents: 'none' }}>
         {cur && (
           <YouTube videoId={cur.id}
-            opts={{ width: '200', height: '200', playerVars: { autoplay: 1, playsinline: 1, controls: 0 } }}
-            onReady={(e: any) => { pl.current = e.target; }}
+            opts={{ width: '200', height: '200', playerVars: { autoplay: autoOn ? 1 : 0, playsinline: 1, controls: 0, ...(startAt ? { start: startAt } : {}) } }}
+            onReady={(e: any) => { pl.current = e.target; applyAudio(); }}
             onStateChange={(e: any) => {
-  if (isNative) return; // di APK kita pakai HTML5 Audio, abaikan YouTube
-
-  if (e.data === 1) {
-    want.current = true;
-    setPlaying(true);
-  } else if (e.data === 2) {
-    if (want.current && document.hidden) e.target.playVideo();
-    else setPlaying(false);
-  } else if (e.data === 0) {
-    ended();
-  }
-}} />
+              if (e.data === 1) { if (bgOn.current) want.current = true; setPlaying(true); applyAudio(); }
+              else if (e.data === 2) { if (want.current && bgOn.current && document.hidden) e.target.playVideo(); else setPlaying(false); }
+              else if (e.data === 0) ended();
+            }} />
         )}
       </div>
 
@@ -601,9 +544,10 @@ useEffect(() => {
             <div className="av"><img src="/logo.png" alt="Cropify" /></div>
             <div className="brand">Cropify</div>
             <button className="ib" onClick={() => setView(1)}><Ic n="search" /></button>
+            <button className="ib" onClick={() => setOpenS(true)}><Ix n="gear" /></button>
           </div>
           <h1 className="rise">Hi, Selamat {g[0]} <span className="hot"><Ic n={g[1]} /></span></h1>
-          <div className="sub rise" style={{ animationDelay: '.08s' }}>Halo, <b>KALTZY404</b> • mau dengar apa hari ini?</div>
+          <div className="sub rise" style={{ animationDelay: '.08s' }}>Halo, <b>{cfg.name.trim() || 'Pendengar'}</b> • mau dengar apa hari ini?</div>
           <div className="chips">
             {CHIPS.map((c, i) => <button key={c[0]} className={'chip ' + (i === chip ? 'on' : '')} onClick={() => setChip(i)}>{c[0]}</button>)}
           </div>
@@ -655,7 +599,7 @@ useEffect(() => {
           </div>
           {!subData || subData._id !== sub.id ? <div className="er">Memuat…</div> : subData.error ? <div className="er">Gagal memuat. Coba lagi nanti.</div> : sub.type === 'artist' ? (<>
             <div className="ah rise">
-              <div className="ap"><img src={cover(subData.thumb, 500)} alt="" /></div>
+              <div className="ap"><img src={cover(subData.thumb || sub.thumb, 500)} alt="" /></div>
               <h1 className="an">{subData.name}</h1>
               {subData.description && <p className="ad">{subData.description}</p>}
               <div className="ab">
@@ -666,29 +610,38 @@ useEffect(() => {
             {(subData.songs || []).length > 0 && (<><h2>Lagu teratas</h2>{subData.songs.slice(0, 8).map((t: T, k: number) => row(t, subData.songs, k))}</>)}
             {(subData.sections || []).map((s: any) => {
               const plist: T[] = s.items.filter((i: any) => i.kind === 'song' || i.kind === 'video').map((i: any) => asT(i, subData.name));
+              const views = s.items.filter((i: any) => /views|ditonton|tayang/i.test(i.sub || '')).length;
+              const wide = /^(Videos?|Live performances|Pertunjukan langsung)$/i.test(s.title) || s.items.some((i: any) => i.kind === 'video') || views > s.items.length / 2;
               return (
                 <div key={s.title}>
                   <h2>{TR[s.title] || s.title}</h2>
                   <div className="hs2">
-                    {s.items.map((it: any, k: number) => (
-                      <button key={it.id + k} className={'sq lg' + (it.kind === 'artist' ? ' rd' : '')}
-                        onClick={() => {
-                          if (it.kind === 'artist') openSub({ type: 'artist', id: it.id, name: it.title });
-                          else if (it.kind === 'album' || it.kind === 'playlist') openSub({ type: 'album', id: it.id, name: it.title });
-                          else { const i = plist.findIndex((x) => x.id === it.id); if (i < 0) return; play(plist, i); setOpen(true); }
-                        }}>
-                        <div className="sqi"><img src={cover(it.thumb, 400)} alt="" /></div>
-                        <b>{it.title}</b><span>{it.sub}</span>
-                      </button>
-                    ))}
+                    {s.items.map((it: any, k: number) => {
+                      const go = () => {
+                        if (it.kind === 'artist') openSub({ type: 'artist', id: it.id, name: it.title, thumb: it.thumb });
+                        else if (it.kind === 'album' || it.kind === 'playlist') openSub({ type: 'album', id: it.id, name: it.title, thumb: it.thumb });
+                        else { const i = plist.findIndex((x) => x.id === it.id); if (i < 0) return; play(plist, i); setOpen(true); }
+                      };
+                      return wide ? (
+                        <button key={it.id + k} className="wd" onClick={go}>
+                          <div className="wi"><img src={wideImg(it.thumb)} alt="" /><span className="wp"><Ic n="play" /></span></div>
+                          <b>{it.title}</b><span className="sb">{it.sub}</span>
+                        </button>
+                      ) : (
+                        <button key={it.id + k} className={'sq lg' + (it.kind === 'artist' ? ' rd' : '')} onClick={go}>
+                          <div className="sqi"><img src={cover(it.thumb, 400)} alt="" /></div>
+                          <b>{it.title}</b><span>{it.sub}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
               );
             })}
           </>) : (<>
             <div className="abh rise">
-              <div className="ai2"><img src={cover(subData.thumb, 400)} alt="" /></div>
-              <div><h2 style={{ margin: '0 0 4px', fontSize: 20 }}>{subData.title}</h2><div className="sub" style={{ margin: 0 }}>{subData.subtitle}</div></div>
+              <div className="ai2"><img src={cover(subData.thumb || sub.thumb || subData.tracks?.[0]?.thumb, 400)} alt="" /></div>
+              <div><h2 style={{ margin: '0 0 4px', fontSize: 20 }}>{subData.title || sub.name}</h2><div className="sub" style={{ margin: 0 }}>{subData.subtitle}</div></div>
             </div>
             <div className="ab">
               <button className="big" onClick={() => playList(subData.tracks || [], false)}><Ic n="play" /> Putar</button>
@@ -711,14 +664,14 @@ useEffect(() => {
               onChange={(e) => { setCat(null); setQ(e.target.value); }}
               onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur(); }}
               onBlur={() => saveRecent(q)} />
-            {q.trim() && !cat && <button className="xb" onClick={closeSearch}><svg className="i" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg></button>}
+            {q.trim() && !cat && <button className="xb" onClick={closeSearch}><Ix n="x" /></button>}
           </div>
           {q.trim() ? (<>
             {!cat && arts.length > 0 && (<>
               <h2>Artis</h2>
               <div className="arow">
                 {arts.map((a) => (
-                  <button key={a.id} className="ac" onClick={() => openSub({ type: 'artist', id: a.id, name: a.name })}>
+                  <button key={a.id} className="ac" onClick={() => openSub({ type: 'artist', id: a.id, name: a.name, thumb: a.thumb })}>
                     <div className="ai"><img src={cover(a.thumb, 300)} alt="" /></div><b>{a.name}</b>
                   </button>
                 ))}
@@ -764,12 +717,46 @@ useEffect(() => {
         </div>
       )}
 
-      {view === 2 && (
+      {view === 2 && openPl && (
+        <PlDetail p={openPl} curId={cur?.id} playing={playing}
+          onBack={() => setPlId(null)}
+          onPlay={(i) => { play(openPl.tracks, i); setOpen(true); }}
+          onAll={(shuf) => playList(openPl.tracks, shuf)}
+          onEdit={() => { setEditPl(openPl); setEditOpen(true); }}
+          onAdd={() => { setPickId(openPl.id); }}
+          onRemove={(i) => updPl(openPl.id, (x) => ({ ...x, tracks: x.tracks.filter((_, k) => k !== i) }))}
+          onMove={(i, d) => updPl(openPl.id, (x) => {
+            const a = [...x.tracks]; const j = i + d;
+            if (j < 0 || j >= a.length) return x;
+            [a[i], a[j]] = [a[j], a[i]];
+            return { ...x, tracks: a };
+          })}
+          onShare={() => sharePl(openPl)} />
+      )}
+
+      {view === 2 && !openPl && (
         <div className="view" key="v2">
-          <h2 style={{ fontSize: 26, margin: '6px 0 12px' }}>Pustaka</h2>
-          <div className="chips">{['Semua', 'Disukai', 'Riwayat'].map((c, i) => <button key={c} className={'chip ' + (i === lf ? 'on' : '')} onClick={() => setLf(i)}>{c}</button>)}</div>
-          {lf !== 2 && (<><h2>Lagu disukai</h2>{liked.length ? liked.map((t, k) => row(t, liked, k)) : <p className="sub">Tekan ikon hati pada lagu untuk menyimpannya di sini.</p>}</>)}
-          {lf !== 1 && (<><h2>Terakhir diputar</h2>{hist.length ? hist.map((t, k) => row(t, hist, k)) : <p className="sub">Belum ada riwayat.</p>}</>)}
+          <div className="sh">
+            <h2 style={{ fontSize: 26, margin: 0, flex: 1 }}>Pustaka</h2>
+            <button className="ib" onClick={() => setOpenS(true)}><Ix n="gear" /></button>
+          </div>
+          <div className="chips">{['Semua', 'Playlist', 'Disukai', 'Riwayat'].map((c, i) => <button key={c} className={'chip ' + (i === lf ? 'on' : '')} onClick={() => setLf(i)}>{c}</button>)}</div>
+          {(lf === 0 || lf === 1) && (<>
+            <h2>Playlist saya</h2>
+            <div role="button" className="row rise" onClick={newPl}>
+              <div className="th plus"><Ix n="plus" /></div>
+              <div className="m"><b>Buat playlist baru</b><span>Pilih lagu, beri nama, logo, dan privasi</span></div>
+            </div>
+            {pls.map((p, k) => (
+              <div key={p.id} role="button" className="row rise" style={{ animationDelay: `${Math.min(k, 8) * 50}ms` }} onClick={() => setPlId(p.id)}>
+                <div className="th"><PlCover p={p} /></div>
+                <div className="m"><b>{p.name}</b><span>{p.tracks.length} lagu • {p.pub ? 'Publik' : 'Privat'}</span></div>
+                <Ix n="chev" />
+              </div>
+            ))}
+          </>)}
+          {(lf === 0 || lf === 2) && (<><h2>Lagu disukai</h2>{liked.length ? liked.map((t, k) => row(t, liked, k)) : <p className="sub">Tekan ikon hati pada lagu untuk menyimpannya di sini.</p>}</>)}
+          {(lf === 0 || lf === 3) && (<><h2>Terakhir diputar</h2>{hist.length ? hist.map((t, k) => row(t, hist, k)) : <p className="sub">Belum ada riwayat.</p>}</>)}
         </div>
       )}
 
@@ -813,13 +800,14 @@ useEffect(() => {
           <button onClick={() => { setOpen(false); setShowQ(false); }}><Ic n="down" /></button>Sedang Diputar
           <div className="nr">
             <button className={showQ ? 'on2' : ''} onClick={() => setShowQ(!showQ)}><Ic n="list" /></button>
+            <button onClick={() => cur && openAdd(cur)}><Ix n="plus" /></button>
             <button className={isL(cur) ? 'like' : ''} onClick={() => cur && like(cur)}><Ic n="heart" /></button>
           </div>
         </div>
-        <div className={'disc ' + (playing ? 'p' : '')}><img src={cover(cur?.thumb, 800)} alt="" /></div>
+        <div className={'disc ' + (playing ? 'p ' : '') + (cfg.spin ? '' : 'ns')}><img src={cover(cur?.thumb, 800)} alt="" /></div>
         <h3>{cur?.title}</h3><div className="ar">{cur?.artist}</div>
         <div className="ly">
-          {lrc.length ? [ai - 1, ai, ai + 1].map((k) => lrc[k] ? <p key={k} className={k === ai ? 'a' : ''}>{lrc[k].s}</p> : <p key={k}>&nbsp;</p>) : <p>Lirik tersinkron tidak tersedia</p>}
+          {!cfg.lyrics ? null : lrc.length ? [ai - 1, ai, ai + 1].map((k) => lrc[k] ? <p key={k} className={k === ai ? 'a' : ''}>{lrc[k].s}</p> : <p key={k}>&nbsp;</p>) : <p>Lirik tersinkron tidak tersedia</p>}
         </div>
         <div className="pr" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * dur); }}>
           <div><i style={{ width: pct + '%' }} /></div>
@@ -843,6 +831,25 @@ useEffect(() => {
           ))}
         </div>
       </div>
+
+      <Settings open={openS} cfg={cfg} set={set} onClose={() => setOpenS(false)}
+        counts={{ liked: liked.length, hist: hist.length, recent: recent.length, pls: pls.length }}
+        sleepLabel={sleepLabel} setSleep={setSleep} notify={say} act={act} />
+
+      <PlSheet open={editOpen} init={editPl} onSave={savePl} onDelete={delPl} onClose={() => { setEditOpen(false); seed.current = undefined; }} />
+      <AddSheet open={addOpen} t={addT} pls={pls} onToggle={toggleIn}
+        onNew={() => { seed.current = addT; setAddOpen(false); setEditPl(undefined); setEditOpen(true); }}
+        onClose={() => setAddOpen(false)} />
+      <PickSheet open={!!pickId} pl={pls.find((p) => p.id === pickId)}
+        onAdd={(t) => { if (pickId) { const p = pls.find((x) => x.id === pickId); if (p && !p.tracks.some((x) => x.id === t.id)) toggleIn(pickId, t); } }}
+        onRemove={(id) => { if (pickId) updPl(pickId, (x) => ({ ...x, tracks: x.tracks.filter((t) => t.id !== id) })); }}
+        onClose={() => setPickId(null)} />
+      <ImportSheet open={shOpen} p={shared}
+        onSave={(p) => { setPls([p, ...pls]); setShOpen(false); setView(2); setPlId(p.id); say('Playlist disimpan ke Pustaka'); }}
+        onPlay={(p) => { setShOpen(false); play(p.tracks, 0); setOpen(true); }}
+        onClose={() => setShOpen(false)} />
+
+      <div className={'toast ' + (toast ? 'o' : '')}>{toast}</div>
     </div>
   );
 }
