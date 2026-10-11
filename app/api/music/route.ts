@@ -12,7 +12,8 @@ const best = (a: any): string => {
   const arr = Array.isArray(a) ? a : a?.contents;
   return arr?.length ? arr[arr.length - 1]?.url ?? '' : '';
 };
-const who = (i: any, fb = ''): string => (i.artists ?? []).map((a: any) => a.name).join(', ') || fb;
+const who = (i: any, fb = ''): string =>
+  (i.artists ?? []).map((a: any) => a.name).join(', ') || i.author?.name || fb;
 const cache = { 'Cache-Control': 's-maxage=1800, stale-while-revalidate' };
 
 export async function GET(req: Request) {
@@ -60,15 +61,20 @@ export async function GET(req: Request) {
           if (items.length) sections.push({ title: txt(s.header?.title), items });
         }
       }
-      return Response.json({ name, description: txt(h?.description), thumb: best(h?.thumbnails) || best(h?.foreground_thumbnails) || best(h?.thumbnail), songs, sections }, { headers: cache });
+      return Response.json(
+        { name, description: txt(h?.description), thumb: best(h?.thumbnails) || best(h?.foreground_thumbnails) || best(h?.thumbnail), songs, sections },
+        { headers: cache },
+      );
     }
 
     if (kind === 'album') {
       const a: any = id.startsWith('MPRE') ? await y.music.getAlbum(id) : await y.music.getPlaylist(id);
       const h: any = a.header;
-      const thumb = best(h?.thumbnails);
       const owner = h?.author?.name ?? '';
       const list: any[] = a.contents ?? a.items ?? [];
+      const first = best(list.find((i) => i?.thumbnails?.length)?.thumbnails);
+      // Sampul playlist/album: coba beberapa bentuk header, lalu pakai sampul lagu pertama
+      const thumb = best(h?.thumbnail) || best(h?.thumbnails) || best(h?.header?.thumbnails) || best(h?.header?.thumbnail) || first;
       const tracks = list
         .filter((i) => i?.id)
         .map((i) => ({ id: i.id as string, title: txt(i.title ?? i.name), artist: who(i, owner), thumb: best(i.thumbnails) || thumb, duration: i.duration?.seconds ?? 0 }));
@@ -80,4 +86,4 @@ export async function GET(req: Request) {
     yt = null;
     return Response.json({ error: 'failed', message: String(e) }, { status: 502 });
   }
-        }
+}
