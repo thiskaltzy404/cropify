@@ -230,7 +230,11 @@ export default function App() {
     const a = new Audio(silentUrl());
     a.loop = true;
     sil.current = a;
-    const onVis = () => { if (want.current && bgOn.current) setTimeout(() => pl.current?.playVideo?.(), 300); };
+    const onVis = () => {
+      if (!(want.current && bgOn.current)) return;
+      [300, 1200, 2500].forEach((ms) =>
+        setTimeout(() => { if (want.current) pl.current?.playVideo?.(); }, ms));
+    };
     document.addEventListener('visibilitychange', onVis);
     return () => { document.removeEventListener('visibilitychange', onVis); a.pause(); };
   }, []);
@@ -244,14 +248,19 @@ export default function App() {
   useEffect(() => {
     const bm = (window as any).Capacitor?.Plugins?.BackgroundMode;
     if (!bm) return;
+    let h: any;
     (async () => {
       try {
         if (!cfg.bg || !cur) { await bm.disable?.(); return; }
         await bm.requestNotificationsPermission?.();
-        await bm.enable?.({ title: 'Cropify', text: 'Musik sedang diputar', silent: true });
-        await bm.disableWebViewOptimizations?.();
+        await bm.enable?.({ title: 'Cropify', text: 'Musik sedang diputar', silent: false });
+        h = await bm.addListener?.('appInBackground', () => {
+          bm.disableWebViewOptimizations?.();
+          setTimeout(() => pl.current?.playVideo?.(), 300);
+        });
       } catch {}
     })();
+    return () => { try { h?.remove?.(); } catch {} };
   }, [cur?.id, cfg.bg]);
 
   // Notifikasi media native (hanya aktif di dalam APK)
@@ -532,7 +541,7 @@ export default function App() {
             onReady={(e: any) => { pl.current = e.target; applyAudio(); }}
             onStateChange={(e: any) => {
               if (e.data === 1) { if (bgOn.current) want.current = true; setPlaying(true); applyAudio(); }
-              else if (e.data === 2) { if (want.current && bgOn.current && document.hidden) e.target.playVideo(); else setPlaying(false); }
+              else if (e.data === 2) { if (want.current && bgOn.current) e.target.playVideo(); else setPlaying(false); }
               else if (e.data === 0) ended();
             }} />
         )}
