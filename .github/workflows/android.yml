@@ -83,6 +83,48 @@ jobs:
                   im.save(os.path.join(d, n))
           PY
 
+      - name: Patch BgWebView (WebView tidak pernah dianggap tersembunyi)
+        continue-on-error: true
+        run: |
+          set -e
+          APP=android-build/android
+          NM=android-build/node_modules/@capacitor/android
+          LIB=$NM/capacitor/src/main/java/com/getcapacitor
+          D=$APP/app/src/main/java/com/kaltzy/cropify
+
+          LAYOUT=$(find "$NM" -name bridge_layout_main.xml | head -1)
+          echo "Layout bawaan: $LAYOUT"
+          cat "$LAYOUT"
+          grep -q "bridge_layout_main" "$LIB/BridgeActivity.java" || { echo "::warning::BridgeActivity tidak memakai bridge_layout_main"; exit 1; }
+
+          if [ -f "$LIB/CapacitorWebView.java" ]; then BASE=com.getcapacitor.CapacitorWebView; else BASE=android.webkit.WebView; fi
+          echo "Kelas dasar: $BASE"
+
+          cat > "$D/BgWebView.java" <<JAVA
+          package com.kaltzy.cropify;
+
+          import android.content.Context;
+          import android.util.AttributeSet;
+          import android.view.View;
+
+          public class BgWebView extends $BASE {
+            public BgWebView(Context context, AttributeSet attrs) {
+              super(context, attrs);
+            }
+
+            @Override
+            protected void onWindowVisibilityChanged(int visibility) {
+              // Jangan pernah laporkan "tersembunyi" supaya YouTube tidak pause
+              super.onWindowVisibilityChanged(View.VISIBLE);
+            }
+          }
+          JAVA
+
+          mkdir -p "$APP/app/src/main/res/layout"
+          sed -E 's#</(com\.getcapacitor\.CapacitorWebView|WebView)>#</com.kaltzy.cropify.BgWebView>#; s#<(com\.getcapacitor\.CapacitorWebView|WebView)#<com.kaltzy.cropify.BgWebView#' "$LAYOUT" > "$APP/app/src/main/res/layout/bridge_layout_main.xml"
+          grep -q "com.kaltzy.cropify.BgWebView" "$APP/app/src/main/res/layout/bridge_layout_main.xml" || { echo "::error::gagal mengganti tag WebView"; exit 1; }
+          cat "$APP/app/src/main/res/layout/bridge_layout_main.xml"
+
       - name: Patch MainActivity (jaga WebView tetap aktif di background)
         run: |
           D=android-build/android/app/src/main/java/com/kaltzy/cropify
