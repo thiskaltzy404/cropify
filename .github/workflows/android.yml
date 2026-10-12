@@ -1,96 +1,52 @@
 name: Build Android APK
-
 on:
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
-
+          node-version: 22
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
-
+          java-version: 21
       - name: Buat proyek Capacitor
         run: |
-          mkdir -p android-build
+          mkdir android-build
           cd android-build
           npm init -y
-          npm i @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6 \
-                @anuradev/capacitor-background-mode \
-                @jofr/capacitor-media-session \
-                --legacy-peer-deps
-          mkdir -p www
+          npm i @capacitor/core @capacitor/cli @capacitor/android @anuradev/capacitor-background-mode @jofr/capacitor-media-session --legacy-peer-deps
+          mkdir www
           echo '<!doctype html><title>Cropify</title>' > www/index.html
-          cat > capacitor.config.json <<'JSON'
-          {
-            "appId": "com.kaltzy.cropify",
-            "appName": "Cropify",
-            "webDir": "www",
-            "server": {
-              "url": "https://cropifymusic.vercel.app",
-              "androidScheme": "https",
-              "cleartext": false
-            }
-          }
-          JSON
+          echo '{"appId":"com.kaltzy.cropify","appName":"Cropify","webDir":"www","server":{"url":"https://cropifymusic.vercel.app"}}' > capacitor.config.json
           npx cap add android
           npx cap sync android
-
-      - name: Inject permission ke AndroidManifest
-        run: |
-          python3 - <<'PY'
-          import re
-          p = 'android-build/android/app/src/main/AndroidManifest.xml'
-          s = open(p).read()
-
-          perms = (
-              '    <uses-permission android:name="android.permission.INTERNET"/>\n'
-              '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n'
-              '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>\n'
-              '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>\n'
-              '    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n'
-          )
-
-          if 'FOREGROUND_SERVICE_MEDIA_PLAYBACK' not in s:
-              s = re.sub(r'(\n\s*<application\b)', '\n' + perms + r'\1', s, count=1)
-              open(p, 'w').write(s)
-              print("Permissions injected.")
-          else:
-              print("Permissions already present, skipping.")
-          PY
-
+          sed -i 's#<application#<uses-permission android:name="android.permission.POST_NOTIFICATIONS"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE"/><uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/><uses-permission android:name="android.permission.WAKE_LOCK"/><application#' android/app/src/main/AndroidManifest.xml
       - name: Ikon aplikasi (opsional)
         continue-on-error: true
         run: |
           rm -rf android-build/android/app/src/main/res/mipmap-anydpi-v26
-          python3 -m pip install --break-system-packages pillow
+          python3 -m pip install --break-system-packages pillow || true
           python3 - <<'PY'
           import glob, os
           from PIL import Image
-          if not os.path.exists('public/logo.png'):
-              raise SystemExit('logo.png tidak ada, skip ikon')
           im = Image.open('public/logo.png').convert('RGBA').resize((192, 192))
           for d in glob.glob('android-build/android/app/src/main/res/mipmap-*'):
               for n in ('ic_launcher.png', 'ic_launcher_round.png'):
                   im.save(os.path.join(d, n))
+              fg = os.path.join(d, 'ic_launcher_foreground.png')
+              if os.path.exists(fg):
+                  os.remove(fg)
           PY
-
       - name: Build APK
         run: |
           cd android-build/android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
-
+          ./gradlew assembleDebug
       - uses: actions/upload-artifact@v4
         with:
           name: Cropify-APK
           path: android-build/android/app/build/outputs/apk/debug/app-debug.apk
-          retention-days: 30
