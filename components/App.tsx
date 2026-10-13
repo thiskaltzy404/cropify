@@ -121,6 +121,9 @@ const EXTRA_CSS = `
 .sksqi{width:100%;aspect-ratio:1;border-radius:18px}
 `;
 
+const countryName = (c: string) => { try { return new Intl.DisplayNames(['id'], { type: 'region' }).of(c) || c; } catch { return c; } };
+const flagOf = (c: string) => c.toUpperCase().replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)));
+
 const HomeSkeleton = () => (
   <div aria-busy="true" aria-label="Memuat lagu">
     <div className="qg2">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="sk skt" />)}</div>
@@ -680,7 +683,8 @@ export default function App() {
             <div className="ah rise">
               <div className="ap"><img src={cover(subData.thumb || sub.thumb, 500)} alt="" /></div>
               <h1 className="an">{subData.name}</h1>
-              {subData.description && <p className="ad">{subData.description}</p>}
+              {subData.country && <p className="ad">{flagOf(subData.country)} {countryName(subData.country)}</p>}
+              {subData.description && subData.description.trim().toLowerCase() !== 'n/a' && <p className="ad">{subData.description}</p>}
               <div className="ab">
                 <button className="big" onClick={() => playList(subData.songs || [], false)}><Ic n="play" /> Putar</button>
                 <button className="big alt" onClick={() => playList(subData.songs || [], true)}><Ic n="shuf" /> Acak</button>
