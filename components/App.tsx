@@ -534,7 +534,7 @@ export default function App() {
       <style>{EXTRA_CSS}</style>
       {cfg.blobs && (<><div className="blob b1" /><div className="blob b2" /></>)}
 
-      <div aria-hidden style={{ position: 'fixed', left: -9999, top: 0, width: 200, height: 200, pointerEvents: 'none' }}>
+      <div aria-hidden style={{ position: 'fixed', left: 0, top: 0, width: 200, height: 200, opacity: 0.01, zIndex: -1, pointerEvents: 'none', overflow: 'hidden' }}>
         {cur && (
           <YouTube videoId={cur.id}
             opts={{ width: '200', height: '200', playerVars: { autoplay: autoOn ? 1 : 0, playsinline: 1, controls: 0, ...(startAt ? { start: startAt } : {}) } }}
