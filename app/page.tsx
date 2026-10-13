@@ -1,2 +1,11 @@
 import App from '../components/App';
-export default function Page() { return <App />; }
+import Splash from '../components/Splash';
+
+export default function Page() {
+  return (
+    <>
+      <App />
+      <Splash />
+    </>
+  );
+}
