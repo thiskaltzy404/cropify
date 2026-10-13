@@ -34,7 +34,8 @@ async function call(path: string, init: RequestInit = {}, token?: string): Promi
       headers: {
         apikey: KEY,
         'Content-Type': 'application/json',
-        Authorization: 'Bearer ' + (token || KEY),
+        // Kunci baru (sb_publishable_...) bukan JWT: jangan dikirim sebagai Bearer
+        ...(token || KEY.startsWith('eyJ') ? { Authorization: 'Bearer ' + (token || KEY) } : {}),
         ...extra,
       },
     });
