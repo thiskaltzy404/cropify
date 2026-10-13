@@ -106,7 +106,44 @@ const EXTRA_CSS = `
 .qh{display:flex;justify-content:space-between;align-items:center;font-weight:800;font-size:18px;margin-bottom:10px}
 .ct button.on2,.nh button.on2{color:var(--ac)}
 .nr{display:flex;gap:12px;align-items:center}
+.sk{background:var(--card);border-radius:10px;position:relative;overflow:hidden}
+.sk:after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--tx) 7%,transparent),transparent);animation:skm 1.4s ease-in-out infinite}
+@keyframes skm{to{transform:translateX(100%)}}
+.skt{height:54px;border-radius:14px}
+.skr{display:flex;align-items:center;gap:14px;padding:8px}
+.skth{width:54px;height:54px;border-radius:16px;flex:none}
+.skm{flex:1;display:flex;flex-direction:column;gap:9px}
+.skl{height:12px;border-radius:7px}
+.skc{width:38px;height:38px;border-radius:50%;flex:none}
+.skh{height:20px;width:46%;margin:22px 0 12px;border-radius:8px}
+.sks{display:flex;gap:12px;overflow:hidden}
+.sksq{width:clamp(112px,32vw,150px);flex:none}
+.sksqi{width:100%;aspect-ratio:1;border-radius:18px}
 `;
+
+const HomeSkeleton = () => (
+  <div aria-busy="true" aria-label="Memuat lagu">
+    <div className="qg2">{[0, 1, 2, 3, 4, 5].map((i) => <div key={i} className="sk skt" />)}</div>
+    <div className="sk skh" />
+    <div className="sks">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="sksq">
+          <div className="sk sksqi" />
+          <div className="sk skl" style={{ width: '80%', marginTop: 10 }} />
+          <div className="sk skl" style={{ width: '55%', marginTop: 7 }} />
+        </div>
+      ))}
+    </div>
+    <div className="sk skh" style={{ width: '52%' }} />
+    {[0, 1, 2, 3].map((i) => (
+      <div key={i} className="skr">
+        <div className="sk skth" />
+        <div className="skm"><div className="sk skl" style={{ width: '70%' }} /><div className="sk skl" style={{ width: '45%' }} /></div>
+        <div className="sk skc" /><div className="sk skc" />
+      </div>
+    ))}
+  </div>
+);
 
 export default function App() {
   const [view, setView] = useState(0);
@@ -593,7 +630,7 @@ export default function App() {
           <div className="chips">
             {CHIPS.map((c, i) => <button key={c[0]} className={'chip ' + (i === chip ? 'on' : '')} onClick={() => setChip(i)}>{c[0]}</button>)}
           </div>
-          {loading ? <div className="er">Memuat lagu…</div> : home.length === 0 ? (
+          {loading ? <HomeSkeleton /> : home.length === 0 ? (
             <div className="er">Gagal memuat lagu. Coba ganti kategori atau muat ulang halaman.</div>
           ) : (<>
             <div className="qg2">
