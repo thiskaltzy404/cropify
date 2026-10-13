@@ -111,6 +111,9 @@ const EXTRA_CSS = `
 @keyframes skm{to{transform:translateX(100%)}}
 .nomo .sk:after{animation:none;display:none}
 .skac{width:96px;flex:none}
+.skap{width:min(52vw,210px);aspect-ratio:1;border-radius:50%;margin:6px auto 16px}
+.skal{width:130px;height:130px;border-radius:22px;flex:none}
+.skbt{height:50px;border-radius:99px}
 .skai{width:96px;height:96px;border-radius:50%}
 .skt{height:54px;border-radius:14px}
 .skr{display:flex;align-items:center;gap:14px;padding:8px}
@@ -173,6 +176,29 @@ const SearchSkeleton = ({ artists }: { artists: boolean }) => (
       </div>
       <div className="sk skh" style={{ width: '20%' }} />
     </>)}
+    {[0, 1, 2, 3, 4, 5].map((i) => <SkRow key={i} />)}
+  </div>
+);
+
+const SubSkeleton = ({ type }: { type: 'artist' | 'album' }) => (
+  <div aria-busy="true" aria-label="Memuat">
+    {type === 'artist' ? (
+      <div className="ah">
+        <div className="sk skap" />
+        <div className="sk skl" style={{ width: '46%', height: 26, margin: '0 auto 12px', borderRadius: 10 }} />
+        <div className="sk skl" style={{ width: '28%', margin: '0 auto 16px' }} />
+      </div>
+    ) : (
+      <div className="abh">
+        <div className="sk skal" />
+        <div style={{ flex: 1 }}>
+          <div className="sk skl" style={{ width: '70%', height: 18, marginBottom: 10 }} />
+          <div className="sk skl" style={{ width: '45%' }} />
+        </div>
+      </div>
+    )}
+    <div className="ab"><div className="sk skbt" /><div className="sk skbt" /></div>
+    {type === 'artist' && <div className="sk skh" style={{ width: '38%' }} />}
     {[0, 1, 2, 3, 4, 5].map((i) => <SkRow key={i} />)}
   </div>
 );
@@ -708,7 +734,7 @@ export default function App() {
             <button className="ib" onClick={() => setSubs(subs.slice(0, -1))}><Ic n="down" c="bk" /></button>
             <h2 style={{ fontSize: 20, margin: 0 }}>{(subData?._id === sub.id && (subData.name || subData.title)) || sub.name || ''}</h2>
           </div>
-          {!subData || subData._id !== sub.id ? <div className="er">Memuat…</div> : subData.error ? <div className="er">Gagal memuat. Coba lagi nanti.</div> : sub.type === 'artist' ? (<>
+          {!subData || subData._id !== sub.id ? <SubSkeleton type={sub.type} /> : subData.error ? <div className="er">Gagal memuat. Coba lagi nanti.</div> : sub.type === 'artist' ? (<>
             <div className="ah rise">
               <div className="ap"><img src={cover(subData.thumb || sub.thumb, 500)} alt="" /></div>
               <h1 className="an">{subData.name}</h1>
