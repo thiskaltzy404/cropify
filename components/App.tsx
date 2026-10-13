@@ -6,6 +6,7 @@ import { MediaSession as NativeMS } from '@jofr/capacitor-media-session';
 import { Ic } from '../lib/icons';
 import { Ix, DEF, Cfg, Pl, T, uid, fm, encodePl, decodePl } from './kit';
 import Settings from './Settings';
+import Profile from './Profile';
 import { PlSheet, AddSheet, PickSheet, ImportSheet, PlDetail, PlCover } from './Playlists';
 
 type Ln = { t: number; s: string };
@@ -13,16 +14,10 @@ type Cat = { t: string; q: string; h: number; i: string };
 type Ar = { id: string; name: string; thumb: string };
 type Sub = { type: 'artist' | 'album'; id: string; name?: string; thumb?: string };
 
-const URL_ = 'https://saweria.co/thiskaltzy404';
-const NAV: [string, string][] = [['home', 'Beranda'], ['search', 'Cari'], ['lib', 'Pustaka'], ['coffee', 'Traktir']];
+const NAV: [string, string][] = [['home', 'Beranda'], ['search', 'Cari'], ['lib', 'Pustaka'], ['user', 'Profil']];
 const CHIPS: [string, string][] = [
   ['Semua', 'lagu indonesia populer'], ['Rilis Baru', 'rilis lagu terbaru 2026'],
   ['Trending', 'trending music indonesia'], ['Santai', 'lagu santai'], ['Fokus', 'lofi study'],
-];
-const PERKS: [string, string, string][] = [
-  ['block', 'Tanpa iklan, selamanya', 'Dengarkan tanpa gangguan'],
-  ['spark', 'Fitur baru rutin', 'Dukunganmu jadi semangat update'],
-  ['server', 'Biaya server & domain', 'Supaya Cropify tetap online'],
 ];
 const TR: Record<string, string> = {
   Songs: 'Lagu teratas', Albums: 'Album', Singles: 'Single & EP', 'Singles & EPs': 'Single & EP',
@@ -137,6 +132,32 @@ const EXTRA_CSS = `
 .lyb2 p.none{font-size:17px;font-weight:600;color:#ffffffa0;cursor:default}
 .lyf{padding:6px 24px 0}
 .ct.lyc{justify-content:center;gap:36px;margin-top:6px}
+.nps{flex:1;min-height:0;overflow-y:auto;margin:0 -24px;padding:0 24px;scrollbar-width:none}
+.nps::-webkit-scrollbar{display:none}
+.npm{min-height:100%;display:flex;flex-direction:column}
+.npx{padding:18px 0 28px;display:flex;flex-direction:column;gap:14px}
+.abc{border-radius:22px;overflow:hidden;background:var(--card)}
+.abi{height:300px;background-size:cover;background-position:center 20%;background-color:var(--card2);position:relative;display:flex;align-items:flex-start;padding:18px}
+.abi:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#0007,transparent 38%,#000a 100%)}
+.abi b{position:relative;z-index:1;font-size:17px}
+.abb{padding:16px 18px 18px}
+.abr{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.abr h4{font-size:22px;margin:0;line-height:1.2}
+.abr span{font-size:13px;color:var(--mut)}
+.abf{border:1.5px solid #ffffff55;border-radius:99px;padding:9px 18px;font-weight:800;font-size:14px;flex:none}
+.abf.on{background:var(--tx);color:#111;border-color:var(--tx)}
+.abd{font-size:14px;color:#ffffffb3;line-height:1.45;margin:12px 0 0;display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.abo{margin-top:14px;color:var(--ac);font-weight:800;font-size:14px}
+.abk{border-radius:22px;background:var(--card);padding:16px}
+.abk h4{font-size:19px;margin:0 0 12px}
+.abx{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.abt{position:relative;aspect-ratio:3/4;border-radius:14px;overflow:hidden;text-align:left;background:var(--card2)}
+.abt img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.abt:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,#000c)}
+.abt b{position:absolute;left:8px;right:8px;bottom:8px;z-index:1;font-size:13px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.krr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}
+.krr b{display:block;font-size:16px}
+.krr span{font-size:13px;color:var(--mut)}
 .skai{width:96px;height:96px;border-radius:50%}
 .skt{height:54px;border-radius:14px}
 .skr{display:flex;align-items:center;gap:14px;padding:8px}
@@ -235,6 +256,7 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [cat, setCat] = useState<Cat | null>(null);
   const [recent, setRecent] = useLS<string[]>('cropify:recent', []);
+  const [follows, setFollows] = useLS<string[]>('cropify:follows', []);
   const [rows, setRows] = useState<{ title: string; tracks: T[] }[]>([]);
   const [q, setQ] = useState('');
   const [res, setRes] = useState<T[]>([]);
@@ -258,6 +280,9 @@ export default function App() {
   const [showLy, setShowLy] = useState(false);
   const lyBox = useRef<HTMLDivElement | null>(null);
   const lyUser = useRef(0);
+  const [about, setAbout] = useState<any>(undefined);
+  const aboutCache = useRef<Record<string, any>>({});
+  const npsRef = useRef<HTMLDivElement | null>(null);
   const [liked, setLiked] = useLS<T[]>('cropify:liked', []);
   const [hist, setHist] = useLS<T[]>('cropify:hist', []);
 
@@ -648,12 +673,49 @@ export default function App() {
     else { sleepEnd.current = false; setSleepEndUi(false); setNow(Date.now()); setSleepAt(Date.now() + m * 60000); say(`Timer tidur ${m} menit`); }
   };
   const sleepLabel = sleepEndUi ? 'Akhir lagu' : sleepAt ? `${Math.max(1, Math.ceil((sleepAt - (now || Date.now())) / 60000))} menit lagi` : 'Mati';
+  // Info artis untuk kartu "Tentang artis" di pemutar
+  useEffect(() => {
+    if (!open || !cur) return;
+    const name = cur.artist.split(',')[0].trim();
+    if (!name) { setAbout(null); return; }
+    const hit = aboutCache.current[name];
+    if (hit !== undefined) { setAbout(hit); return; }
+    setAbout(undefined);
+    let ok = true;
+    (async () => {
+      const r = await api('/api/music?kind=artists&q=' + encodeURIComponent(name));
+      const list: Ar[] = r.artists || [];
+      const a = list.find((x) => x.name.toLowerCase() === name.toLowerCase()) || list[0];
+      if (!a) { aboutCache.current[name] = null; if (ok) setAbout(null); return; }
+      const d = await api('/api/music?kind=artist&id=' + encodeURIComponent(a.id));
+      if (d && d.name && !d.error) {
+        const v = { ...d, id: a.id };
+        aboutCache.current[name] = v;
+        if (ok) setAbout(v);
+      } else if (ok) setAbout(null);
+    })();
+    return () => { ok = false; };
+  }, [open, cur?.id]);
+
+  // Kembalikan halaman pemutar ke atas setelah ditutup
+  useEffect(() => {
+    if (open) return;
+    const id = setTimeout(() => npsRef.current?.scrollTo(0, 0), 650);
+    return () => clearTimeout(id);
+  }, [open]);
+
+  const isF = (n: string) => follows.indexOf(n) >= 0;
+  const toggleFollow = (n: string) => {
+    if (isF(n)) setFollows(follows.filter((x) => x !== n));
+    else { setFollows([...follows, n]); say('Mulai mengikuti ' + n); }
+  };
+
   const act = {
     clearHist: () => { setHist([]); say('Riwayat putar dihapus'); },
     clearRecent: () => { setRecent([]); say('Riwayat pencarian dihapus'); },
     clearLiked: () => { setLiked([]); say('Lagu disukai dihapus'); },
     clearPls: () => { setPls([]); setPlId(null); say('Semua playlist dihapus'); },
-    exportData: () => JSON.stringify({ app: 'cropify', v: 1, cfg, liked, hist, recent, playlists: pls }),
+    exportData: () => JSON.stringify({ app: 'cropify', v: 1, cfg, liked, hist, recent, playlists: pls, follows }),
     importData: (s: string) => {
       try {
         const o = JSON.parse(s);
@@ -663,6 +725,7 @@ export default function App() {
         if (Array.isArray(o.hist)) setHist(o.hist);
         if (Array.isArray(o.recent)) setRecent(o.recent);
         if (Array.isArray(o.playlists)) setPls(o.playlists);
+        if (Array.isArray(o.follows)) setFollows(o.follows);
         return true;
       } catch { return false; }
     },
@@ -693,6 +756,13 @@ export default function App() {
   let ai = -1;
   for (let k = 0; k < lrc.length; k++) { if (lrc[k].t <= time + 0.3) ai = k; else break; }
   const pct = dur ? Math.min(100, (time / dur) * 100) : 0;
+
+  const explore: any[] = about
+    ? (Array.isArray(about.sections) ? about.sections : [])
+        .flatMap((sc: any) => sc.items || [])
+        .filter((i: any) => i && i.thumb && (i.kind === 'artist' || i.kind === 'album' || i.kind === 'playlist'))
+        .slice(0, 3)
+    : [];
 
   // Gulirkan lirik ke baris yang sedang dinyanyikan
   useEffect(() => {
@@ -944,22 +1014,9 @@ export default function App() {
       )}
 
       {view === 3 && (
-        <div className="view" key="v3">
-          <div className="hero rise">
-            <div className="steam"><i /><i /><i /></div>
-            <div className="cup"><Ic n="coffee" /></div>
-            <span className="hb h1"><Ic n="heart" /></span><span className="hb h2"><Ic n="heart" /></span><span className="hb h3"><Ic n="heart" /></span>
-          </div>
-          <h2 className="rise" style={{ justifyContent: 'center', fontSize: 27, margin: '6px 0 4px', animationDelay: '.1s' }}>Traktir KALTZY404</h2>
-          <p className="sub rise" style={{ textAlign: 'center', maxWidth: 300, margin: '0 auto 22px', animationDelay: '.15s' }}>Cropify gratis dan tanpa iklan. Dukunganmu bikin aplikasi ini terus berkembang.</p>
-          {PERKS.map((x, k) => (
-            <div key={x[0]} className="pk rise" style={{ animationDelay: `${0.2 + k * 0.08}s` }}>
-              <div className="pi"><Ic n={x[0]} /></div><div><b>{x[1]}</b><span>{x[2]}</span></div>
-            </div>
-          ))}
-          <a className="big shine rise" href={URL_} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', animationDelay: '.5s' }}><Ic n="heart" /> Traktir lewat Saweria</a>
-          <p className="sub rise" style={{ textAlign: 'center', fontSize: 12, marginTop: 14, animationDelay: '.6s' }}>Terima kasih banyak, kamu keren! 💜</p>
-        </div>
+        <Profile cfg={cfg} setName={(n) => set({ name: n })} liked={liked} hist={hist} pls={pls}
+          follows={follows} unfollow={(n) => setFollows(follows.filter((x) => x !== n))}
+          act={act} notify={say} play={(t) => playList([t], false)} />
       )}
 
       <div className={'mini ' + (cur ? '' : 'h')}>
@@ -979,6 +1036,8 @@ export default function App() {
       </div>
 
       <div className={'np ' + (open ? 'o' : '')} style={{ '--h1': `hsl(${hue(cur?.id || 'a')},50%,28%)`, '--l1': `hsl(${hue(cur?.id || 'a')},62%,25%)`, '--l2': `hsl(${hue(cur?.id || 'a')},58%,13%)` } as any}>
+        <div className="nps" ref={npsRef}>
+        <div className="npm">
         <div className="nh">
           <button onClick={() => { setOpen(false); setShowQ(false); setShowLy(false); }}><Ic n="down" /></button>Sedang Diputar
           <div className="nr">
@@ -1010,6 +1069,56 @@ export default function App() {
           <button className="pp" onClick={toggle}><Ic n={playing ? 'pause' : 'play'} /></button>
           <button onClick={() => step(1)}><Ic n="next" /></button>
           <button className={repeat ? 'on2' : ''} onClick={() => setRepeat((repeat + 1) % 3)}><Rp one={repeat === 2} /></button>
+        </div>
+        </div>
+
+        <div className="npx">
+          {about === undefined && <div className="sk" style={{ height: 380, borderRadius: 22 }} />}
+          {about && (
+            <>
+              <div className="abc">
+                <div className="abi" style={{ backgroundImage: `url(${cover(about.thumb, 800)})` }}><b>Tentang artis</b></div>
+                <div className="abb">
+                  <div className="abr">
+                    <div style={{ minWidth: 0 }}>
+                      <h4>{about.name}</h4>
+                      {about.country && <span>{flagOf(about.country)} {countryName(about.country)}</span>}
+                    </div>
+                    <button className={'abf ' + (isF(about.name) ? 'on' : '')} onClick={() => toggleFollow(about.name)}>{isF(about.name) ? 'Mengikuti' : 'Ikuti'}</button>
+                  </div>
+                  {about.description && String(about.description).trim().toLowerCase() !== 'n/a' && <p className="abd">{about.description}</p>}
+                  <button className="abo" onClick={() => { setOpen(false); setShowQ(false); setShowLy(false); openSub({ type: 'artist', id: about.id, name: about.name, thumb: about.thumb }); }}>Lihat halaman artis</button>
+                </div>
+              </div>
+              {explore.length > 0 && (
+                <div className="abk">
+                  <h4>Jelajahi {about.name}</h4>
+                  <div className="abx">
+                    {explore.map((it: any, k: number) => (
+                      <button key={it.id + k} className="abt" onClick={() => { setOpen(false); setShowQ(false); setShowLy(false); openSub({ type: it.kind === 'artist' ? 'artist' : 'album', id: it.id, name: it.title, thumb: it.thumb }); }}>
+                        <img src={cover(it.thumb, 400)} alt="" /><b>{it.title}</b>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+          {cur && (
+            <div className="abk">
+              <h4>Kredit</h4>
+              {cur.artist.split(',').map((x, i) => {
+                const n = x.trim();
+                return n ? (
+                  <div key={n + i} className="krr">
+                    <div style={{ minWidth: 0 }}><b>{n}</b><span>{i === 0 ? 'Artis utama' : 'Artis'}</span></div>
+                    <button className={'abf ' + (isF(n) ? 'on' : '')} onClick={() => toggleFollow(n)}>{isF(n) ? 'Mengikuti' : 'Ikuti'}</button>
+                  </div>
+                ) : null;
+              })}
+            </div>
+          )}
+        </div>
         </div>
 
         <div className={'qs ' + (showQ ? 'o' : '')}>

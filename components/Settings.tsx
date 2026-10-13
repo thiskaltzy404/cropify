@@ -134,11 +134,6 @@ export default function Settings({ open, cfg, set, onClose, counts, sleepLabel, 
       </Sec>
 
       <Sec title="Tentang dan dukungan">
-        <a className="sr" href="https://saweria.co/thiskaltzy404" target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', textDecoration: 'none' }}>
-          <span className="si"><Ix n="coffee" /></span>
-          <div className="st"><b>Traktir KALTZY404</b><span>Dukung lewat Saweria</span></div>
-          <Ix n="chev" />
-        </a>
         <Item icon="share" title="Bagikan Cropify" sub="Kirim tautan aplikasi ke temanmu" onClick={shareApp} right={<Ix n="chev" />} />
         <Item icon="info" title="Versi" sub="Cropify 1.0" />
         <Item icon="db" title="Data tersimpan di perangkat" sub="Pengaturan, playlist, dan riwayat disimpan di perangkat ini, bukan di server" />
