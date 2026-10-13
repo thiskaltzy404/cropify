@@ -109,6 +109,9 @@ const EXTRA_CSS = `
 .sk{background:var(--card);border-radius:10px;position:relative;overflow:hidden}
 .sk:after{content:'';position:absolute;inset:0;transform:translateX(-100%);background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--tx) 7%,transparent),transparent);animation:skm 1.4s ease-in-out infinite}
 @keyframes skm{to{transform:translateX(100%)}}
+.nomo .sk:after{animation:none;display:none}
+.skac{width:96px;flex:none}
+.skai{width:96px;height:96px;border-radius:50%}
 .skt{height:54px;border-radius:14px}
 .skr{display:flex;align-items:center;gap:14px;padding:8px}
 .skth{width:54px;height:54px;border-radius:16px;flex:none}
@@ -145,6 +148,32 @@ const HomeSkeleton = () => (
         <div className="sk skc" /><div className="sk skc" />
       </div>
     ))}
+  </div>
+);
+
+const SkRow = () => (
+  <div className="skr">
+    <div className="sk skth" />
+    <div className="skm"><div className="sk skl" style={{ width: '70%' }} /><div className="sk skl" style={{ width: '45%' }} /></div>
+    <div className="sk skc" /><div className="sk skc" />
+  </div>
+);
+
+const SearchSkeleton = ({ artists }: { artists: boolean }) => (
+  <div aria-busy="true" aria-label="Mencari">
+    {artists && (<>
+      <div className="sk skh" style={{ width: '24%', marginTop: 4 }} />
+      <div className="arow">
+        {[0, 1, 2, 3].map((i) => (
+          <div key={i} className="skac">
+            <div className="sk skai" />
+            <div className="sk skl" style={{ width: '70%', margin: '10px auto 0' }} />
+          </div>
+        ))}
+      </div>
+      <div className="sk skh" style={{ width: '20%' }} />
+    </>)}
+    {[0, 1, 2, 3, 4, 5].map((i) => <SkRow key={i} />)}
   </div>
 );
 
@@ -767,7 +796,7 @@ export default function App() {
                 <div><b>{cat.t}</b><span>{searching ? 'Mencari lagu…' : `${res.length} lagu pilihan`}</span></div>
               </div>
             )}
-            {searching ? <div className="er">Mencari…</div> : res.length ? res.map((t, k) => row(t, res, k)) : <div className="er">Tidak ditemukan</div>}
+            {searching ? <SearchSkeleton artists={!cat && arts.length === 0} /> : res.length ? res.map((t, k) => row(t, res, k)) : <div className="er">Tidak ditemukan</div>}
           </>) : (<>
             <button className="sur rise" onClick={() => { const all = GROUPS.flatMap((x) => x.cats); openCat(all[Math.floor(Math.random() * all.length)]); }}>
               <span className="sp"><svg className="i" viewBox="0 0 24 24" dangerouslySetInnerHTML={{ __html: CI.shuffle }} /></span>
