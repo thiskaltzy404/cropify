@@ -225,18 +225,51 @@ export default function App() {
     return () => { evs.forEach((n) => document.removeEventListener(n, stop)); document.removeEventListener('keydown', block); };
   }, []);
 
-  // Pemutaran latar belakang: audio senyap + lanjutkan otomatis saat halaman tersembunyi
+  // Pemutaran latar belakang: audio senyap + lanjutkan otomatis secepat mungkin saat app pindah ke background
   useEffect(() => {
     const a = new Audio(silentUrl());
     a.loop = true;
     sil.current = a;
-    const onVis = () => {
-      if (!(want.current && bgOn.current)) return;
-      [300, 1200, 2500].forEach((ms) =>
-        setTimeout(() => { if (want.current) pl.current?.playVideo?.(); }, ms));
+    let inBg = false;
+    let bt: any = null;
+    const go = () => {
+      try {
+        const p = pl.current;
+        if (!p || !(want.current && bgOn.current)) return;
+        const st = p.getPlayerState?.();
+        if (st === 2 || st === 5 || st === -1) p.playVideo();
+      } catch {}
     };
-    document.addEventListener('visibilitychange', onVis);
-    return () => { document.removeEventListener('visibilitychange', onVis); a.pause(); };
+    // Tembak playVideo setiap 75 md selama ~3 detik (tanpa menunggu event YouTube)
+    const burst = () => {
+      if (!(want.current && bgOn.current)) return;
+      go();
+      if (bt) clearInterval(bt);
+      let n = 0;
+      bt = setInterval(() => { go(); if (++n >= 40) { clearInterval(bt); bt = null; } }, 75);
+    };
+    const onBg = () => { inBg = true; burst(); };
+    const onFg = () => { inBg = false; };
+    const watch = setInterval(() => { if (inBg) go(); }, 300);
+    (window as any).__bgNow = onBg;
+    (window as any).__bgBurst = burst;
+    document.addEventListener('visibilitychange', burst);
+    document.addEventListener('pause', onBg);
+    document.addEventListener('resume', onFg);
+    window.addEventListener('pagehide', burst);
+    window.addEventListener('blur', burst);
+    return () => {
+      document.removeEventListener('visibilitychange', burst);
+      document.removeEventListener('pause', onBg);
+      document.removeEventListener('resume', onFg);
+      window.removeEventListener('pagehide', burst);
+      window.removeEventListener('blur', burst);
+      clearInterval(watch);
+      if (bt) clearInterval(bt);
+      delete (window as any).__bgNow;
+      delete (window as any).__bgBurst;
+      a.pause();
+    };
   }, []);
   useEffect(() => {
     const a = sil.current;
@@ -256,7 +289,7 @@ export default function App() {
         await bm.enable?.({ title: 'Cropify', text: 'Musik sedang diputar', silent: false });
         h = await bm.addListener?.('appInBackground', () => {
           bm.disableWebViewOptimizations?.();
-          setTimeout(() => pl.current?.playVideo?.(), 300);
+          (window as any).__bgNow?.();
         });
       } catch {}
     })();
@@ -541,7 +574,7 @@ export default function App() {
             onReady={(e: any) => { pl.current = e.target; applyAudio(); }}
             onStateChange={(e: any) => {
               if (e.data === 1) { if (bgOn.current) want.current = true; setPlaying(true); applyAudio(); }
-              else if (e.data === 2) { if (want.current && bgOn.current) e.target.playVideo(); else setPlaying(false); }
+              else if (e.data === 2) { if (want.current && bgOn.current) { e.target.playVideo(); (window as any).__bgBurst?.(); } else setPlaying(false); }
               else if (e.data === 0) ended();
             }} />
         )}
