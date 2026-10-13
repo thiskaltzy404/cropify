@@ -7,6 +7,10 @@ import { Ic } from '../lib/icons';
 import { Ix, DEF, Cfg, Pl, T, uid, fm, encodePl, decodePl } from './kit';
 import Settings from './Settings';
 import Profile from './Profile';
+import UserView from './UserView';
+import { initials } from './pfkit';
+import { searchProfiles, fetchProfileByUsername } from './auth';
+import type { Prof } from './auth';
 import { PlSheet, AddSheet, PickSheet, ImportSheet, PlDetail, PlCover } from './Playlists';
 
 type Ln = { t: number; s: string };
@@ -155,6 +159,7 @@ const EXTRA_CSS = `
 .abt img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .abt:after{content:'';position:absolute;inset:0;background:linear-gradient(180deg,transparent 45%,#000c)}
 .abt b{position:absolute;left:8px;right:8px;bottom:8px;z-index:1;font-size:13px;line-height:1.2;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.folb{display:block;margin:14px auto 2px}
 .krr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 0}
 .krr b{display:block;font-size:16px}
 .krr span{font-size:13px;color:var(--mut)}
@@ -281,6 +286,8 @@ export default function App() {
   const lyBox = useRef<HTMLDivElement | null>(null);
   const lyUser = useRef(0);
   const [about, setAbout] = useState<any>(undefined);
+  const [users, setUsers] = useState<Prof[]>([]);
+  const [viewUser, setViewUser] = useState<Prof | null>(null);
   const aboutCache = useRef<Record<string, any>>({});
   const npsRef = useRef<HTMLDivElement | null>(null);
   const [liked, setLiked] = useLS<T[]>('cropify:liked', []);
@@ -631,7 +638,7 @@ export default function App() {
     if (v.length < 2 || cat || !cfg.saveSearch) return;
     setRecent([v, ...recent.filter((x) => x.toLowerCase() !== v.toLowerCase())].slice(0, 8));
   };
-  const openSub = (s: Sub) => setSubs([...subs, s]);
+  const openSub = (s: Sub) => { setView(1); setSubs([...subs, s]); };
   const playList = (list: T[], shuf: boolean) => {
     if (!list.length) return;
     const l = shuf ? [...list].sort(() => Math.random() - 0.5) : list;
@@ -710,6 +717,27 @@ export default function App() {
     else { setFollows([...follows, n]); say('Mulai mengikuti ' + n); }
   };
 
+  // Cari pengguna lain (akun teman, dll)
+  useEffect(() => {
+    if (!q.trim() || cat) { setUsers([]); return; }
+    let ok = true;
+    const id = setTimeout(async () => {
+      const r = await searchProfiles(q);
+      if (ok) setUsers(r);
+    }, 500);
+    return () => { ok = false; clearTimeout(id); };
+  }, [q, cat]);
+
+  // Buka profil dari link ?u=username
+  useEffect(() => {
+    const u = new URLSearchParams(window.location.search).get('u');
+    if (!u) return;
+    fetchProfileByUsername(u).then((p) => {
+      if (p) setViewUser(p);
+      else say('Profil tidak ditemukan');
+    });
+  }, []);
+
   const act = {
     clearHist: () => { setHist([]); say('Riwayat putar dihapus'); },
     clearRecent: () => { setRecent([]); say('Riwayat pencarian dihapus'); },
@@ -757,12 +785,24 @@ export default function App() {
   for (let k = 0; k < lrc.length; k++) { if (lrc[k].t <= time + 0.3) ai = k; else break; }
   const pct = dur ? Math.min(100, (time / dur) * 100) : 0;
 
-  const explore: any[] = about
+  const nk = (x: string) => String(x || '').toLowerCase().replace(/[^a-z0-9]+/g, '') || String(x || '').toLowerCase();
+  const exploreAll: any[] = about
     ? (Array.isArray(about.sections) ? about.sections : [])
         .flatMap((sc: any) => sc.items || [])
         .filter((i: any) => i && i.thumb && (i.kind === 'artist' || i.kind === 'album' || i.kind === 'playlist'))
-        .slice(0, 3)
     : [];
+  const seenT = new Set<string>();
+  const seenC = new Set<string>();
+  const explore: any[] = exploreAll
+    .filter((i: any) => {
+      const kt = nk(i.title);
+      const kc = String(i.thumb).replace(/=w\d+-h\d+.*$/, '');
+      if (seenT.has(kt) || seenC.has(kc)) return false;
+      seenT.add(kt);
+      seenC.add(kc);
+      return true;
+    })
+    .slice(0, 3);
 
   // Gulirkan lirik ke baris yang sedang dinyanyikan
   useEffect(() => {
@@ -855,6 +895,7 @@ export default function App() {
               <h1 className="an">{subData.name}</h1>
               {subData.country && <p className="ad">{flagOf(subData.country)} {countryName(subData.country)}</p>}
               {subData.description && subData.description.trim().toLowerCase() !== 'n/a' && <p className="ad">{subData.description}</p>}
+              <button className={'abf folb ' + (isF(subData.name) ? 'on' : '')} onClick={() => toggleFollow(subData.name)}>{isF(subData.name) ? 'Mengikuti' : 'Ikuti'}</button>
               <div className="ab">
                 <button className="big" onClick={() => playList(subData.songs || [], false)}><Ic n="play" /> Putar</button>
                 <button className="big alt" onClick={() => playList(subData.songs || [], true)}><Ic n="shuf" /> Acak</button>
@@ -920,6 +961,20 @@ export default function App() {
             {q.trim() && !cat && <button className="xb" onClick={closeSearch}><Ix n="x" /></button>}
           </div>
           {q.trim() ? (<>
+            {!cat && users.length > 0 && (<>
+              <h2>Pengguna</h2>
+              <div className="arow">
+                {users.map((u) => (
+                  <button key={u.id} className="ac" onClick={() => setViewUser(u)}>
+                    <div className="ai">
+                      {u.avatar ? <img src={u.avatar} alt="" /> : <div style={{ width: '100%', height: '100%', display: 'grid', placeItems: 'center', fontSize: 30, fontWeight: 800 }}>{initials(u.display_name || u.username || '?')}</div>}
+                    </div>
+                    <b>{u.display_name || u.username}</b>
+                    {u.username && <span style={{ fontSize: 11, color: 'var(--mut)' }}>@{u.username}</span>}
+                  </button>
+                ))}
+              </div>
+            </>)}
             {!cat && arts.length > 0 && (<>
               <h2>Artis</h2>
               <div className="arow">
@@ -1157,6 +1212,8 @@ export default function App() {
           </div>
         </div>
       </div>
+
+      <UserView prof={viewUser} onClose={() => setViewUser(null)} notify={say} />
 
       <Settings open={openS} cfg={cfg} set={set} onClose={() => setOpenS(false)}
         counts={{ liked: liked.length, hist: hist.length, recent: recent.length, pls: pls.length }}

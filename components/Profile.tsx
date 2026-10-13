@@ -7,6 +7,7 @@ import {
   authReady, Session, Prof, getSession, validToken, signIn, signUp, signOut, updateUser, recover,
   fetchProfile, saveProfile, usernameTaken, saveBackup, loadBackup, backupInfo,
 } from './auth';
+import { PF_CSS, ProfHeader, ProfInfo, ShareSheet, regionName, flagOf, initials } from './pfkit';
 
 type Props = {
   cfg: Cfg;
@@ -21,24 +22,11 @@ type Props = {
   play: (t: T) => void;
 };
 
-type Form = { dn: string; un: string; bio: string; country: string; avatar: string; banner: number; genres: string[]; fav: string };
+type Form = { dn: string; un: string; bio: string; country: string; avatar: string; genres: string[]; fav: string };
 
 const GENRES = ['Pop', 'Rock', 'Indie', 'Hip Hop', 'R&B', 'Jazz', 'Dangdut', 'Koplo', 'Akustik', 'Lo-fi', 'EDM', 'K-Pop', 'J-Pop', 'Religi', 'Keroncong', 'Metal', 'Reggae', 'Klasik'];
 const CODES = 'ID MY SG BN TH VN PH TL KH LA MM JP KR CN TW HK MO IN PK BD LK NP AE SA QA KW BH OM JO LB EG MA DZ TN NG GH KE ET ZA TR IL IR IQ RU UA PL CZ HU RO GR DE FR ES PT IT NL BE CH AT SE NO DK FI IE IS GB US CA MX BR AR CL CO PE VE AU NZ'.split(' ');
-const HUES = [265, 330, 200, 150, 30, 0, 285, 55];
 
-const regionName = (c: string): string => {
-  try { return new Intl.DisplayNames(['id'], { type: 'region' }).of(c) || c; } catch { return c; }
-};
-const flagOf = (c: string): string => c.toUpperCase().replace(/./g, (ch) => String.fromCodePoint(127397 + ch.charCodeAt(0)));
-const initials = (n: string): string => {
-  const p = (n || '?').trim().split(/\s+/).slice(0, 2);
-  return p.map((w) => (w ? w.charAt(0).toUpperCase() : '')).join('') || '?';
-};
-const grad = (h: number): string => `linear-gradient(170deg, hsl(${h},60%,30%), hsl(${(h + 40) % 360},50%,13%) 75%, var(--bg))`;
-const fmtMonth = (iso?: string): string => {
-  try { return new Date(iso || '').toLocaleDateString('id-ID', { month: 'long', year: 'numeric' }); } catch { return ''; }
-};
 const ago = (iso: string): string => {
   const s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
   if (s < 60) return 'baru saja';
@@ -69,45 +57,6 @@ async function toAvatar(file: File): Promise<string> {
   }
 }
 
-const CSS = `
-.pfh{margin:-18px -18px 0;padding:calc(30px + env(safe-area-inset-top,0px)) 18px 22px;text-align:center}
-.pfa{width:104px;height:104px;border-radius:50%;margin:0 auto 12px;overflow:hidden;background:#ffffff22;display:grid;place-items:center;font-size:38px;font-weight:800;box-shadow:0 14px 40px #0008}
-.pfa img{width:100%;height:100%;object-fit:cover;display:block}
-.pfn{font-size:26px;font-weight:800;margin:0;line-height:1.15}
-.pfu{color:#ffffffb3;font-size:14px;margin-top:2px}
-.pfb{font-size:14px;color:#ffffffd0;max-width:320px;margin:10px auto 0;line-height:1.4}
-.pfm{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-top:12px}
-.pfe2{margin-top:16px}
-.pfst{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0 4px}
-.pfst div{background:var(--card);border-radius:18px;padding:12px 4px;text-align:center}
-.pfst b{display:block;font-size:19px}
-.pfst span{font-size:11px;color:var(--mut)}
-.pfsec{margin:22px 0 10px;font-size:18px;font-weight:800;display:block}
-.pfseg{display:grid;grid-template-columns:1fr 1fr;gap:6px;background:var(--card);padding:5px;border-radius:99px;margin-bottom:14px}
-.pfseg button{padding:11px;border-radius:99px;font-size:13px;font-weight:700;color:var(--mut)}
-.pfseg button.on{background:var(--ac);color:#111}
-.pfl{font-size:12px;color:var(--mut);margin:14px 4px 6px;display:flex;justify-content:space-between}
-.pfe{color:#ff7a90;font-size:13px;margin:10px 4px 0;line-height:1.4}
-.pfok{color:var(--ac);font-size:13px;margin:10px 4px 0;line-height:1.4}
-.pfeye{position:relative}
-.pfeye button{position:absolute;right:8px;top:50%;transform:translateY(-50%);padding:8px 10px;font-size:12px;font-weight:700;color:var(--mut)}
-.pflink{display:block;margin:14px auto 0;color:var(--ac);font-size:13px;font-weight:700;text-align:center}
-.pfsheet{position:absolute;inset:0;z-index:36;background:var(--bg);overflow-y:auto;padding:calc(18px + env(safe-area-inset-top,0px)) 18px 24px;transform:translateY(100%);visibility:hidden;transition:transform .5s cubic-bezier(.65,0,.2,1),visibility 0s .5s}
-.pfsheet.o{transform:none;visibility:visible;transition:transform .5s cubic-bezier(.65,0,.2,1),visibility 0s}
-.pfbar{position:sticky;bottom:0;padding:14px 0 6px;background:linear-gradient(transparent,var(--bg) 35%);margin-top:10px}
-.pfedav{display:flex;align-items:center;gap:16px;margin:8px 0 4px}
-.pfedav .pfa{margin:0;width:88px;height:88px;font-size:32px;flex:none}
-.pfsw{display:flex;gap:10px;flex-wrap:wrap}
-.pfsw button{width:40px;height:40px;border-radius:50%;border:3px solid transparent}
-.pfsw button.on{border-color:#fff}
-.pfsel{appearance:none;-webkit-appearance:none}
-.pfcnt{font-size:11px;color:var(--mut)}
-.pfrow2{display:flex;gap:10px;margin-top:10px}
-.pfrow2 .btn{flex:1}
-.pffol{display:flex;gap:8px;flex-wrap:wrap}
-.pffol button{display:flex;gap:6px;align-items:center;background:var(--card);border-radius:99px;padding:8px 12px;font-size:13px;font-weight:600}
-.pffol svg{width:14px;height:14px;color:var(--mut)}
-`;
 
 export default function Profile({ cfg, setName, liked, hist, pls, follows, unfollow, act, notify, play }: Props) {
   const [state, setState] = useState<'boot' | 'out' | 'load' | 'in' | 'err'>('boot');
@@ -129,7 +78,7 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
 
   // edit profil
   const [editOpen, setEditOpen] = useState(false);
-  const [form, setForm] = useState<Form>({ dn: '', un: '', bio: '', country: '', avatar: '', banner: 0, genres: [], fav: '' });
+  const [form, setForm] = useState<Form>({ dn: '', un: '', bio: '', country: '', avatar: '', genres: [], fav: '' });
   const [formErr, setFormErr] = useState('');
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -139,6 +88,10 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
   const [aPw, setAPw] = useState('');
   const [aPw2, setAPw2] = useState('');
   const [aErr, setAErr] = useState('');
+
+  // bagikan
+  const [shareOpen, setShareOpen] = useState(false);
+  const [shareTab, setShareTab] = useState<'link' | 'qr'>('link');
 
   // cadangan
   const [bkAt, setBkAt] = useState<string | null>(null);
@@ -245,7 +198,6 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
       bio: prof.bio || '',
       country: prof.country || '',
       avatar: prof.avatar || '',
-      banner: typeof prof.banner === 'number' ? prof.banner : 0,
       genres: prof.genres || [],
       fav: prof.fav_artist || '',
     });
@@ -289,7 +241,6 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
         bio: form.bio.trim() || null,
         country: form.country || null,
         avatar: form.avatar || null,
-        banner: form.banner,
         genres: form.genres,
         fav_artist: form.fav.trim() || null,
       });
@@ -386,7 +337,7 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
   if (state === 'boot' || state === 'load') {
     return (
       <>
-        <style>{CSS}</style>
+        <style>{PF_CSS}</style>
         <div className="view" key="pfv">
           <div aria-busy="true" aria-label="Memuat">
             <div className="sk" style={{ height: 250, borderRadius: 26, margin: '0 0 16px' }} />
@@ -407,7 +358,7 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
   if (state === 'err') {
     return (
       <>
-        <style>{CSS}</style>
+        <style>{PF_CSS}</style>
         <div className="view" key="pfv">
           <div className="er" style={{ paddingTop: 80 }}>{loadErr}</div>
           <div className="pfrow2">
@@ -422,7 +373,7 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
   if (state === 'out') {
     return (
       <>
-        <style>{CSS}</style>
+        <style>{PF_CSS}</style>
         <div className="view" key="pfv">
           <div className="hero rise">
             <div className="cup"><Ic n="user" /></div>
@@ -495,25 +446,20 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
   // ----- state === 'in' -----
   const p: Prof = prof || { id: '' };
   const name = p.display_name || cfg.name;
-  const hue = HUES[(typeof p.banner === 'number' ? p.banner : 0) % HUES.length];
   const recent = hist.slice(0, 5);
 
   return (
     <>
-      <style>{CSS}</style>
+      <style>{PF_CSS}</style>
       <div className="view" key="pfv">
-        <div className="pfh" style={{ background: grad(hue) }}>
-          <div className="pfa">{p.avatar ? <img src={p.avatar} alt="" /> : initials(name)}</div>
-          <h1 className="pfn">{name}</h1>
-          {p.username && <div className="pfu">@{p.username}</div>}
-          {p.bio && <p className="pfb">{p.bio}</p>}
-          <div className="pfm">
-            {p.country && <span className="bdg">{flagOf(p.country)} {regionName(p.country)}</span>}
-            {p.created_at && <span className="bdg"><Ix n="clock" /> Anggota sejak {fmtMonth(p.created_at)}</span>}
-            {p.fav_artist && <span className="bdg"><Ix n="heart" /> {p.fav_artist}</span>}
+        <ProfHeader prof={p} name={name}>
+          <div className="pfact">
+            <button className="btn" onClick={openEdit}><Ix n="user" /> Edit profil</button>
+            <button className="btn" onClick={() => { setShareTab('link'); setShareOpen(true); }}><Ix n="share" /> Bagikan</button>
           </div>
-          <button className="btn pfe2" onClick={openEdit}><Ix n="user" /> Edit profil</button>
-        </div>
+        </ProfHeader>
+
+        <ProfInfo prof={p} onQr={() => { setShareTab('qr'); setShareOpen(true); }} />
 
         <div className="pfst">
           <div><b>{liked.length}</b><span>Disukai</span></div>
@@ -615,6 +561,8 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
         <button className="btn dng" style={{ width: '100%', marginTop: 14 }} onClick={() => logout(false)}>Keluar</button>
       </div>
 
+      <ShareSheet open={shareOpen} tab={shareTab} setTab={setShareTab} onClose={() => setShareOpen(false)} prof={p} name={name} notify={notify} />
+
       {/* Edit profil */}
       <div className={'pfsheet ' + (editOpen ? 'o' : '')}>
         <div className="sh" style={{ marginBottom: 6 }}>
@@ -629,13 +577,6 @@ export default function Profile({ cfg, setName, liked, hist, pls, follows, unfol
             <button className="btn" onClick={() => fileRef.current && fileRef.current.click()}><Ix n="img" /> Ganti foto</button>
             {form.avatar && <button className="pflink" style={{ margin: '8px 0 0', textAlign: 'left' }} onClick={() => setForm({ ...form, avatar: '' })}>Hapus foto</button>}
           </div>
-        </div>
-
-        <label className="pfl"><span>Warna latar profil</span></label>
-        <div className="pfsw">
-          {HUES.map((h, i) => (
-            <button key={h} className={form.banner === i ? 'on' : ''} style={{ background: `linear-gradient(135deg, hsl(${h},60%,38%), hsl(${(h + 40) % 360},50%,20%))` }} onClick={() => setForm({ ...form, banner: i })} aria-label={'Warna ' + (i + 1)} />
-          ))}
         </div>
 
         <label className="pfl"><span>Nama tampilan</span><span className="pfcnt">{form.dn.length}/30</span></label>
