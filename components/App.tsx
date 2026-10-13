@@ -114,6 +114,27 @@ const EXTRA_CSS = `
 .skap{width:min(52vw,210px);aspect-ratio:1;border-radius:50%;margin:6px auto 16px}
 .skal{width:130px;height:130px;border-radius:22px;flex:none}
 .skbt{height:50px;border-radius:99px}
+.ly{flex:1;min-height:104px;margin:12px 0;padding:14px 16px;border-radius:20px;text-align:left;justify-content:flex-start;gap:5px;overflow:hidden;background:linear-gradient(160deg,var(--l1),var(--l2));cursor:pointer}
+.ly p{margin:0;transform:none;font-size:15px;font-weight:700;color:#ffffff66;line-height:1.25}
+.ly p.a{font-size:18px;font-weight:800;color:#fff}
+.lyt{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.lyt b{font-size:13px}
+.lyt button{background:#fff;color:#111;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:800}
+.lyr{position:absolute;inset:0;z-index:7;display:flex;flex-direction:column;padding:calc(18px + env(safe-area-inset-top,0px)) 0 26px;background:linear-gradient(180deg,var(--l1),var(--l2));transform:translateY(100%);transition:transform .55s cubic-bezier(.65,0,.2,1)}
+.lyr.o{transform:none}
+.lyh{display:flex;align-items:center;padding:0 16px 6px;gap:8px}
+.lyh button{width:44px;height:44px;display:grid;place-items:center;color:#fff;flex:none}
+.lyh div{flex:1;text-align:center;line-height:1.3;margin-right:44px;min-width:0}
+.lyh b{display:block;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lyh span{font-size:14px;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.lyb2{flex:1;overflow-y:auto;position:relative;padding:22px 24px 45vh;scrollbar-width:none;-webkit-mask-image:linear-gradient(180deg,transparent 0,#000 5%,#000 90%,transparent);mask-image:linear-gradient(180deg,transparent 0,#000 5%,#000 90%,transparent)}
+.lyb2::-webkit-scrollbar{display:none}
+.lyb2 p{margin:0 0 24px;font-size:27px;line-height:1.22;font-weight:800;letter-spacing:-.4px;color:#ffffff6b;transition:color .35s;cursor:pointer}
+.lyb2 p.a{color:#fff}
+.lyb2 p.pl{color:#ffffffd9;cursor:default;margin-bottom:20px}
+.lyb2 p.none{font-size:17px;font-weight:600;color:#ffffffa0;cursor:default}
+.lyf{padding:6px 24px 0}
+.ct.lyc{justify-content:center;gap:36px;margin-top:6px}
 .skai{width:96px;height:96px;border-radius:50%}
 .skt{height:54px;border-radius:14px}
 .skr{display:flex;align-items:center;gap:14px;padding:8px}
@@ -230,6 +251,10 @@ export default function App() {
   const [shuffle, setShuffle] = useState(false);
   const [repeat, setRepeat] = useState(0); // 0 = mati, 1 = ulang semua, 2 = ulang satu lagu
   const [lrc, setLrc] = useState<Ln[]>([]);
+  const [plain, setPlain] = useState<string[]>([]);
+  const [showLy, setShowLy] = useState(false);
+  const lyBox = useRef<HTMLDivElement | null>(null);
+  const lyUser = useRef(0);
   const [liked, setLiked] = useLS<T[]>('cropify:liked', []);
   const [hist, setHist] = useLS<T[]>('cropify:hist', []);
 
@@ -489,10 +514,17 @@ export default function App() {
   // Lirik tersinkron
   useEffect(() => {
     setLrc([]);
+    setPlain([]);
+    lyUser.current = 0;
+    lyBox.current?.scrollTo(0, 0);
     if (!cur || !cfg.lyrics) return;
     let ok = true;
     const p = new URLSearchParams({ title: cur.title, artist: cur.artist.split(',')[0], duration: String(cur.duration || '') });
-    api('/api/lyrics?' + p).then((d) => { if (ok && d.lrc) setLrc(parseLrc(d.lrc)); });
+    api('/api/lyrics?' + p).then((d) => {
+      if (!ok) return;
+      if (d.lrc) setLrc(parseLrc(d.lrc));
+      else if (d.plain) setPlain(String(d.plain).split(/\r?\n/).slice(0, 250));
+    });
     return () => { ok = false; };
   }, [cur?.id, cfg.lyrics]);
 
@@ -656,6 +688,14 @@ export default function App() {
   let ai = -1;
   for (let k = 0; k < lrc.length; k++) { if (lrc[k].t <= time + 0.3) ai = k; else break; }
   const pct = dur ? Math.min(100, (time / dur) * 100) : 0;
+
+  // Gulirkan lirik ke baris yang sedang dinyanyikan
+  useEffect(() => {
+    const box = lyBox.current;
+    if (!showLy || !box || ai < 0 || Date.now() - lyUser.current < 3000) return;
+    const el = box.querySelector('p.a') as HTMLElement | null;
+    if (el) box.scrollTo({ top: Math.max(0, el.offsetTop - box.clientHeight * 0.3), behavior: cfg.motion ? 'smooth' : 'auto' });
+  }, [ai, showLy]);
 
   return (
     <div id="app" className={cfg.motion ? '' : 'nomo'}>
@@ -933,9 +973,9 @@ export default function App() {
         ))}
       </div>
 
-      <div className={'np ' + (open ? 'o' : '')} style={{ '--h1': `hsl(${hue(cur?.id || 'a')},50%,28%)` } as any}>
+      <div className={'np ' + (open ? 'o' : '')} style={{ '--h1': `hsl(${hue(cur?.id || 'a')},50%,28%)`, '--l1': `hsl(${hue(cur?.id || 'a')},62%,25%)`, '--l2': `hsl(${hue(cur?.id || 'a')},58%,13%)` } as any}>
         <div className="nh">
-          <button onClick={() => { setOpen(false); setShowQ(false); }}><Ic n="down" /></button>Sedang Diputar
+          <button onClick={() => { setOpen(false); setShowQ(false); setShowLy(false); }}><Ic n="down" /></button>Sedang Diputar
           <div className="nr">
             <button className={showQ ? 'on2' : ''} onClick={() => setShowQ(!showQ)}><Ic n="list" /></button>
             <button onClick={() => cur && openAdd(cur)}><Ix n="plus" /></button>
@@ -944,9 +984,17 @@ export default function App() {
         </div>
         <div className={'disc ' + (playing ? 'p ' : '') + (cfg.spin ? '' : 'ns')}><img src={cover(cur?.thumb, 800)} alt="" /></div>
         <h3>{cur?.title}</h3><div className="ar">{cur?.artist}</div>
-        <div className="ly">
-          {!cfg.lyrics ? null : lrc.length ? [ai - 1, ai, ai + 1].map((k) => lrc[k] ? <p key={k} className={k === ai ? 'a' : ''}>{lrc[k].s}</p> : <p key={k}>&nbsp;</p>) : <p>Lirik tersinkron tidak tersedia</p>}
-        </div>
+        {cfg.lyrics && (
+          <div className="ly" onClick={() => (lrc.length || plain.length) && setShowLy(true)}>
+            <div className="lyt">
+              <b>Pratinjau lirik</b>
+              {(lrc.length > 0 || plain.length > 0) && <button onClick={(e) => { e.stopPropagation(); setShowLy(true); }}>Tampilkan lirik</button>}
+            </div>
+            {lrc.length ? (ai < 0 ? [0, 1] : [ai, ai + 1]).map((k) => lrc[k] ? <p key={k} className={k === ai ? 'a' : ''}>{lrc[k].s}</p> : null)
+              : plain.length ? plain.filter((x) => x.trim()).slice(0, 2).map((x, k) => <p key={k} className={k === 0 ? 'a' : ''}>{x}</p>)
+              : <p>Lirik tidak tersedia untuk lagu ini</p>}
+          </div>
+        )}
         <div className="pr" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * dur); }}>
           <div><i style={{ width: pct + '%' }} /></div>
         </div>
@@ -967,6 +1015,32 @@ export default function App() {
               <div className="m"><b style={i === qi ? { color: 'var(--ac)' } : undefined}>{t.title}</b><span>{t.artist}</span></div>
             </div>
           ))}
+        </div>
+
+        <div className={'lyr ' + (showLy ? 'o' : '')}>
+          <div className="lyh">
+            <button onClick={() => setShowLy(false)}><Ic n="down" /></button>
+            <div><b>{cur?.title}</b><span>{cur?.artist}</span></div>
+          </div>
+          <div className="lyb2" ref={lyBox}
+            onTouchStart={() => { lyUser.current = Date.now(); }}
+            onTouchMove={() => { lyUser.current = Date.now(); }}
+            onWheel={() => { lyUser.current = Date.now(); }}>
+            {lrc.length ? lrc.map((l, k) => <p key={k} className={k === ai ? 'a' : ''} onClick={() => { lyUser.current = 0; seek(l.t); }}>{l.s}</p>)
+              : plain.length ? plain.map((x, k) => x.trim() ? <p key={k} className="pl">{x}</p> : <div key={k} style={{ height: 14 }} />)
+              : <p className="none">Lirik tidak tersedia untuk lagu ini</p>}
+          </div>
+          <div className="lyf">
+            <div className="pr" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * dur); }}>
+              <div><i style={{ width: pct + '%' }} /></div>
+            </div>
+            <div className="tm"><span>{fm(time)}</span><span>-{fm(Math.max(0, dur - time))}</span></div>
+            <div className="ct lyc">
+              <button onClick={() => step(-1)}><Ic n="prev" /></button>
+              <button className="pp" onClick={toggle}><Ic n={playing ? 'pause' : 'play'} /></button>
+              <button onClick={() => step(1)}><Ic n="next" /></button>
+            </div>
+          </div>
         </div>
       </div>
 
