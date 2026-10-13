@@ -16,6 +16,37 @@ const who = (i: any, fb = ''): string =>
   (i.artists ?? []).map((a: any) => a.name).join(', ') || i.author?.name || fb;
 const cache = { 'Cache-Control': 's-maxage=1800, stale-while-revalidate' };
 
+const mbCache = new Map<string, string | null>();
+// Negara asal artis dari MusicBrainz (kode ISO 2 huruf, mis. "ID"); null jika tidak yakin
+async function countryOf(name: string): Promise<string | null> {
+  const key = name.trim().toLowerCase();
+  if (!key) return null;
+  if (mbCache.has(key)) return mbCache.get(key) ?? null;
+  try {
+    const url =
+      'https://musicbrainz.org/ws/2/artist/?fmt=json&limit=5&query=' +
+      encodeURIComponent(`artist:"${name.replace(/"/g, '')}"`);
+    const r = await fetch(url, {
+      headers: { 'User-Agent': 'Cropify/1.0 ( https://cropifymusic.vercel.app )', Accept: 'application/json' },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!r.ok) return null;
+    const j: any = await r.json();
+    const exact: any[] = (j.artists ?? []).filter(
+      (a: any) =>
+        String(a.name).toLowerCase() === key ||
+        (a.aliases ?? []).some((x: any) => String(x.name).toLowerCase() === key),
+    );
+    const pick = exact.find((a) => a.country || a.area?.['iso-3166-1-codes']?.length);
+    const c: string | undefined = pick?.country || pick?.area?.['iso-3166-1-codes']?.[0];
+    const code = c && /^[A-Z]{2}$/.test(c) && c !== 'XW' && c !== 'XE' ? c : null;
+    mbCache.set(key, code);
+    return code;
+  } catch {
+    return null;
+  }
+}
+
 export async function GET(req: Request) {
   const sp = new URL(req.url).searchParams;
   const kind = sp.get('kind');
@@ -61,8 +92,11 @@ export async function GET(req: Request) {
           if (items.length) sections.push({ title: txt(s.header?.title), items });
         }
       }
+      const dsc: any = h?.description;
+      const description = typeof dsc === 'string' ? dsc : dsc?.text || '';
+      const country = await countryOf(name);
       return Response.json(
-        { name, description: txt(h?.description), thumb: best(h?.thumbnails) || best(h?.foreground_thumbnails) || best(h?.thumbnail), songs, sections },
+        { name, description, country, thumb: best(h?.thumbnails) || best(h?.foreground_thumbnails) || best(h?.thumbnail), songs, sections },
         { headers: cache },
       );
     }
