@@ -115,11 +115,13 @@ const EXTRA_CSS = `
 .skal{width:130px;height:130px;border-radius:22px;flex:none}
 .skbt{height:50px;border-radius:99px}
 .ly{flex:1;min-height:104px;margin:12px 0;padding:14px 16px;border-radius:20px;text-align:left;justify-content:flex-start;gap:5px;overflow:hidden;background:linear-gradient(160deg,var(--l1),var(--l2));cursor:pointer}
-.ly p{margin:0;transform:none;font-size:15px;font-weight:700;color:#ffffff66;line-height:1.25}
-.ly p.a{font-size:18px;font-weight:800;color:#fff}
-.lyt{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:4px}
+.ly p{margin:0;transform:none;font-size:17px;font-weight:700;color:#ffffff66;line-height:1.28}
+.ly p.a{font-size:19px;font-weight:800;color:#fff}
+.ly p.pl{color:#ffffffb8}
+.lyt{flex:none;margin-bottom:8px}
 .lyt b{font-size:13px}
-.lyt button{background:#fff;color:#111;border-radius:99px;padding:6px 12px;font-size:12px;font-weight:800}
+.lyp{flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:7px;-webkit-mask-image:linear-gradient(180deg,#000 62%,transparent);mask-image:linear-gradient(180deg,#000 62%,transparent)}
+.lyb{flex:none;align-self:flex-start;background:#fff;color:#111;border-radius:99px;padding:10px 18px;font-size:14px;font-weight:800;margin-top:10px}
 .lyr{position:absolute;inset:0;z-index:7;display:flex;flex-direction:column;padding:calc(18px + env(safe-area-inset-top,0px)) 0 26px;background:linear-gradient(180deg,var(--l1),var(--l2));transform:translateY(100%);transition:transform .55s cubic-bezier(.65,0,.2,1)}
 .lyr.o{transform:none}
 .lyh{display:flex;align-items:center;padding:0 16px 6px;gap:8px}
@@ -252,6 +254,7 @@ export default function App() {
   const [repeat, setRepeat] = useState(0); // 0 = mati, 1 = ulang semua, 2 = ulang satu lagu
   const [lrc, setLrc] = useState<Ln[]>([]);
   const [plain, setPlain] = useState<string[]>([]);
+  const [lyLoad, setLyLoad] = useState(false);
   const [showLy, setShowLy] = useState(false);
   const lyBox = useRef<HTMLDivElement | null>(null);
   const lyUser = useRef(0);
@@ -519,9 +522,11 @@ export default function App() {
     lyBox.current?.scrollTo(0, 0);
     if (!cur || !cfg.lyrics) return;
     let ok = true;
+    setLyLoad(true);
     const p = new URLSearchParams({ title: cur.title, artist: cur.artist.split(',')[0], duration: String(cur.duration || '') });
     api('/api/lyrics?' + p).then((d) => {
       if (!ok) return;
+      setLyLoad(false);
       if (d.lrc) setLrc(parseLrc(d.lrc));
       else if (d.plain) setPlain(String(d.plain).split(/\r?\n/).slice(0, 250));
     });
@@ -986,13 +991,13 @@ export default function App() {
         <h3>{cur?.title}</h3><div className="ar">{cur?.artist}</div>
         {cfg.lyrics && (
           <div className="ly" onClick={() => (lrc.length || plain.length) && setShowLy(true)}>
-            <div className="lyt">
-              <b>Pratinjau lirik</b>
-              {(lrc.length > 0 || plain.length > 0) && <button onClick={(e) => { e.stopPropagation(); setShowLy(true); }}>Tampilkan lirik</button>}
+            <div className="lyt"><b>Pratinjau lirik</b></div>
+            <div className="lyp">
+              {lrc.length ? lrc.slice(Math.max(0, ai), Math.max(0, ai) + 10).map((l, k) => <p key={Math.max(0, ai) + k} className={Math.max(0, ai) + k === ai ? 'a' : ''}>{l.s}</p>)
+                : plain.length ? plain.filter((x) => x.trim()).slice(0, 10).map((x, k) => <p key={k} className="pl">{x}</p>)
+                : <p>{lyLoad ? 'Memuat lirik…' : 'Lirik tidak tersedia untuk lagu ini'}</p>}
             </div>
-            {lrc.length ? (ai < 0 ? [0, 1] : [ai, ai + 1]).map((k) => lrc[k] ? <p key={k} className={k === ai ? 'a' : ''}>{lrc[k].s}</p> : null)
-              : plain.length ? plain.filter((x) => x.trim()).slice(0, 2).map((x, k) => <p key={k} className={k === 0 ? 'a' : ''}>{x}</p>)
-              : <p>Lirik tidak tersedia untuk lagu ini</p>}
+            {(lrc.length > 0 || plain.length > 0) && <button className="lyb" onClick={(e) => { e.stopPropagation(); setShowLy(true); }}>Tampilkan lirik</button>}
           </div>
         )}
         <div className="pr" onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); seek(((e.clientX - r.left) / r.width) * dur); }}>
