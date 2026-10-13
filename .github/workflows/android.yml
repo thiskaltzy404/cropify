@@ -83,7 +83,7 @@ jobs:
                   im.save(os.path.join(d, n))
           PY
 
-      - name: Patch BgWebView (WebView tidak pernah dianggap tersembunyi)
+      - name: Patch BgWebView (WebView tidak pernah di-pause atau disembunyikan)
         continue-on-error: true
         run: |
           set -e
@@ -92,10 +92,14 @@ jobs:
           LIB=$NM/capacitor/src/main/java/com/getcapacitor
           D=$APP/app/src/main/java/com/kaltzy/cropify
 
-          LAYOUT=$(find "$NM" -name bridge_layout_main.xml | head -1)
-          echo "Layout bawaan: $LAYOUT"
+          # Nama layout yang dipakai BridgeActivity (otomatis, sesuai versi Capacitor)
+          NAME=$(grep -o 'R\.layout\.[A-Za-z0-9_]*' "$LIB/BridgeActivity.java" | head -1 | sed 's/R\.layout\.//')
+          [ -n "$NAME" ] || { echo "::error::nama layout BridgeActivity tidak ditemukan"; exit 1; }
+          echo "Layout BridgeActivity: $NAME"
+          LAYOUT=$(find "$NM" -name "$NAME.xml" | head -1)
+          echo "File layout: $LAYOUT"
+          [ -n "$LAYOUT" ] || { echo "::error::file layout $NAME.xml tidak ditemukan"; exit 1; }
           cat "$LAYOUT"
-          grep -q "bridge_layout_main" "$LIB/BridgeActivity.java" || { echo "::warning::BridgeActivity tidak memakai bridge_layout_main"; exit 1; }
 
           if [ -f "$LIB/CapacitorWebView.java" ]; then BASE=com.getcapacitor.CapacitorWebView; else BASE=android.webkit.WebView; fi
           echo "Kelas dasar: $BASE"
@@ -107,6 +111,8 @@ jobs:
           import android.util.AttributeSet;
           import android.view.View;
 
+          // WebView yang TIDAK PERNAH dianggap tersembunyi / di-pause,
+          // supaya player YouTube di dalamnya tidak ikut pause saat app ke background.
           public class BgWebView extends $BASE {
             public BgWebView(Context context, AttributeSet attrs) {
               super(context, attrs);
@@ -114,16 +120,36 @@ jobs:
 
             @Override
             protected void onWindowVisibilityChanged(int visibility) {
-              // Jangan pernah laporkan "tersembunyi" supaya YouTube tidak pause
               super.onWindowVisibilityChanged(View.VISIBLE);
+            }
+
+            @Override
+            protected void onVisibilityChanged(View changedView, int visibility) {
+              super.onVisibilityChanged(changedView, View.VISIBLE);
+            }
+
+            @Override
+            public void onWindowFocusChanged(boolean hasWindowFocus) {
+              super.onWindowFocusChanged(true);
+            }
+
+            @Override
+            public void onPause() {
+              // abaikan: jangan pernah pause WebView
+            }
+
+            @Override
+            public void pauseTimers() {
+              // abaikan: jangan hentikan timer JavaScript
             }
           }
           JAVA
 
           mkdir -p "$APP/app/src/main/res/layout"
-          sed -E 's#</(com\.getcapacitor\.CapacitorWebView|WebView)>#</com.kaltzy.cropify.BgWebView>#; s#<(com\.getcapacitor\.CapacitorWebView|WebView)#<com.kaltzy.cropify.BgWebView#' "$LAYOUT" > "$APP/app/src/main/res/layout/bridge_layout_main.xml"
-          grep -q "com.kaltzy.cropify.BgWebView" "$APP/app/src/main/res/layout/bridge_layout_main.xml" || { echo "::error::gagal mengganti tag WebView"; exit 1; }
-          cat "$APP/app/src/main/res/layout/bridge_layout_main.xml"
+          sed -E 's#</(com\.getcapacitor\.CapacitorWebView|WebView)>#</com.kaltzy.cropify.BgWebView>#; s#<(com\.getcapacitor\.CapacitorWebView|WebView)#<com.kaltzy.cropify.BgWebView#' "$LAYOUT" > "$APP/app/src/main/res/layout/$NAME.xml"
+          grep -q "com.kaltzy.cropify.BgWebView" "$APP/app/src/main/res/layout/$NAME.xml" || { echo "::error::gagal mengganti tag WebView"; exit 1; }
+          echo "=== BgWebView TERPASANG ==="
+          cat "$APP/app/src/main/res/layout/$NAME.xml"
 
       - name: Patch MainActivity (jaga WebView tetap aktif di background)
         run: |
@@ -152,7 +178,7 @@ jobs:
                   w.resumeTimers();
                   w.dispatchWindowVisibilityChanged(View.VISIBLE);
                 }
-                handler.postDelayed(this, 700);
+                handler.postDelayed(this, 300);
               }
             };
 
