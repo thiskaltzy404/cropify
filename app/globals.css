@@ -333,6 +333,9 @@ img{-webkit-user-drag:none;user-drag:none;pointer-events:none}
 /* Layar tinggi: jangan biarkan kotak lirik melar memenuhi seluruh layar */
 @media (min-height:1000px){
   .ly{flex:0 1 auto;max-height:420px}
+  /* .npm di App.tsx memakai min-height:100%; di layar tinggi itu membuat jarak kosong besar
+     sebelum "Tentang artis". Selector lebih spesifik agar menang dari CSS di App.tsx. */
+  .np .npm{min-height:0}
 }
 
 /* Safe-area atas sudah dipakai oleh :root, jangan ditambah lagi di layar Sedang Diputar */
