@@ -228,3 +228,22 @@ export async function backupInfo(uid: string): Promise<string | null> {
   if (!r.ok) return null;
   return Array.isArray(r.j) && r.j[0] ? String(r.j[0].updated_at) : null;
 }
+
+// ---------- Profil publik (cari pengguna lain) ----------
+const PUB = 'id,username,display_name,bio,country,avatar,genres,fav_artist,created_at';
+
+export async function searchProfiles(q: string): Promise<Prof[]> {
+  const c = q.replace(/[*,()%\\"]/g, ' ').trim();
+  if (!authReady || c.length < 2) return [];
+  const e = encodeURIComponent(c);
+  const r = await call(
+    '/rest/v1/profiles?select=' + PUB + '&or=(username.ilike.*' + e + '*,display_name.ilike.*' + e + '*)&limit=6',
+  );
+  return r.ok && Array.isArray(r.j) ? (r.j as Prof[]) : [];
+}
+
+export async function fetchProfileByUsername(u: string): Promise<Prof | null> {
+  if (!authReady) return null;
+  const r = await call('/rest/v1/profiles?select=' + PUB + '&username=eq.' + encodeURIComponent(u.toLowerCase()) + '&limit=1');
+  return r.ok && Array.isArray(r.j) && r.j[0] ? (r.j[0] as Prof) : null;
+}
