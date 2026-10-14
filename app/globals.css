@@ -243,7 +243,7 @@ img{-webkit-user-drag:none;user-drag:none;pointer-events:none}
 .nomo .rise{opacity:1}
 
 /* ===== RESPONSIF: semua perangkat ===== */
-html,body{height:100%;height:100dvh}
+/* (dihapus: height:100dvh membuat body lebih tinggi dari area html dan menggeser navbar keluar layar) */
 
 /* Tablet (768px+): satu kolom lebih lebar, navigasi tetap di bawah */
 @media (min-width:768px){
@@ -258,7 +258,7 @@ html,body{height:100%;height:100dvh}
 }
 
 /* Laptop / PC (1024px+): sidebar kiri + konten + mini player */
-@media (min-width:1024px){
+@media (min-width:900px) and (orientation:landscape){
   :root{--sb:232px}
   #app{max-width:1400px;width:100%;border-inline:1px solid #ffffff10}
 
