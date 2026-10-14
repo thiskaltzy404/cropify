@@ -246,7 +246,7 @@ img{-webkit-user-drag:none;user-drag:none;pointer-events:none}
 /* (dihapus: height:100dvh membuat body lebih tinggi dari area html dan menggeser navbar keluar layar) */
 
 /* Tablet (768px+): satu kolom lebih lebar, navigasi tetap di bawah */
-@media (min-width:768px){
+@media (min-width:768px) and (min-aspect-ratio:3/5){
   #app{max-width:720px}
   .view{padding:24px 28px 240px}
   .sq{width:clamp(140px,20vw,180px)}
@@ -323,3 +323,17 @@ img{-webkit-user-drag:none;user-drag:none;pointer-events:none}
   .view{padding-top:12px}
   .disc{width:min(30vh,160px);margin:10px auto}
 }
+
+/* Mode desktop di HP (lebar virtual ~980px tapi layar tinggi/portrait):
+   tampil penuh seperti di aplikasi, bukan kolom sempit di tengah */
+@media (min-width:600px) and (max-aspect-ratio:3/5){
+  #app{max-width:none;border-inline:0}
+}
+
+/* Layar tinggi: jangan biarkan kotak lirik melar memenuhi seluruh layar */
+@media (min-height:1000px){
+  .ly{flex:0 1 auto;max-height:420px}
+}
+
+/* Safe-area atas sudah dipakai oleh :root, jangan ditambah lagi di layar Sedang Diputar */
+.np{padding-top:18px}
